@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.sites-local/
+*.log
+artifacts/
+
+sources/
+__pycache__/
