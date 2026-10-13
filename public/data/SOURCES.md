@@ -61,3 +61,7 @@ python scripts/fetch-region.py
 - 两张 mask 图片首行北，Babylon `invertY=false`、UV `u=(x-minX)/widthMetres; v=(maxZ-z)/heightMetres`。
 - `regional-shore.png` R 为栅格化海岸距离/100 米、G 为陆海 mask；全域像素约68×57米，距离是栅格近似。栈桥使用 `shore-distance.png` 精确局部距离。
 - 重建区域 OSM：`python scripts/extract-regional-osm.py`；更新区域裁切纹理：`python scripts/build-regional-shore.py`。
+
+## 单独复原的地标
+
+2026-10-13更新：回澜阁、栈桥和青岛站使用建筑资料与实景参考独立复原。黄色琉璃瓦、24亭柱、151㎡占地及历史钟楼35m等已知值，与按照片估算的细部区别列于 [LANDMARKS.md](LANDMARKS.md)。真实OSM坐标和平面保留，不因文献栈桥440m而拉伸405.55m源多边形。青岛站 way/1465995439、way/1465995441、way/1465995440 的普通楼模型由地标模块替换。

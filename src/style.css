@@ -9,3 +9,7 @@
 @media(max-width:680px){.exploring .modes{top:89px}.exploring .guide{top:143px}}
 
 .dem-credit{margin-left:auto;margin-right:20px}@media(max-width:680px){.dem-credit{display:none}}
+
+.view-buttons{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+
+@media(min-width:681px) and (max-height:800px){.controls .panel-heading{margin-bottom:14px}.controls .range-row{margin-top:14px}.controls .range-row label{margin-bottom:8px}.controls .solar-row{margin-top:14px;padding-top:12px}.controls .view-buttons{margin-top:14px}.mini{width:166px;height:140px;padding:8px}.mini canvas{width:148px;height:96px}}

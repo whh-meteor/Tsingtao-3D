@@ -14,3 +14,7 @@
 参考：https://github.com/mrdoob/three.js/blob/dev/examples/jsm/objects/Water.js
 
 未嵌入Google、高德、百度的地图瓦片、街景或卫星影像。所有运行资源随静态包提供，浏览器无需在线地图API密钥。
+
+## 地标建筑参考
+
+回澜阁/栈桥/青岛站的报刊实景与建筑文字资料仅作模型参考，未将报刊或旅游网站照片作为运行贴图。模型几何及黄色瓦面、红瓦、窗格、钟盘、牌匾、石材等程序纹理为原创。参考链接及已知/估算尺寸见 public/data/LANDMARKS.md，详细方法见 docs/pavilion-references.md 和 docs/station-references.md。地理基底依然遵循 OSM / ODbL。

@@ -1,5 +1,7 @@
 import { AbstractMesh, Color3, DynamicTexture, Mesh, Scene, ShadowGenerator, StandardMaterial, Texture, Vector3, VertexData } from './babylon';
 import earcut from 'earcut';
+import { buildStation } from './station';
+import { buildPavilion } from './pavilion';
 
 type P = [number, number];
 type Feature = {id: string | number; name?: string; polygon?: P[]; holes?: P[][]; points?: P[]; height?: number; estimatedHeight?: boolean; width?: number; type?: string; tags?: Record<string,string>};
@@ -22,8 +24,13 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
   const landMat = makeMat('Urban ground','#93a584'), sandMat = makeMat('Tidal stone band','#bcb095');
   // Negative slope/depth bias pulls the road surface toward the camera in Babylon.
   roadMat.zOffset=-2;roadMat.zOffsetUnits=-2;pavement.zOffset=-1;lineMat.zOffset=-3;lineMat.zOffsetUnits=-3;
-  const red = makeMat('Huilan pavilion vermilion','#9b382c'), green = makeMat('Glazed green pavilion roof','#326753');
-  const gold = makeMat('Pavilion finial','#bfa86e'), railMat = makeMat('Pale granite railings','#e0ddd0');
+  const railMat = makeMat('Zhanqiao painted metal railing','#426b80');
+  const lampMat = makeMat('Zhanqiao dark cast metal lamps','#303d41');
+  const globeMat = makeMat('Zhanqiao lotus lamp glass','#fff4ce');
+  globeMat.emissiveColor=new Color3(.12,.10,.06);
+  const tiled=(name:string,mat:StandardMaterial,size:number,draw:(ctx:CanvasRenderingContext2D)=>void)=>{const t=new DynamicTexture(name,{width:size,height:size},scene,true,Texture.TRILINEAR_SAMPLINGMODE);draw(t.getContext() as unknown as CanvasRenderingContext2D);t.update(false);t.wrapU=t.wrapV=Texture.WRAP_ADDRESSMODE;t.anisotropicFilteringLevel=8;mat.diffuseTexture=t;mat.diffuseColor=Color3.White();textures.push(t);};
+  tiled('Granite slab joints',pavement,256,ctx=>{ctx.fillStyle='#d0c8b7';ctx.fillRect(0,0,256,256);let seed=29;for(let i=0;i<5000;i++){seed=(seed*1664525+1013904223)>>>0;const x=seed%256;seed=(seed*1664525+1013904223)>>>0;const y=seed%256;ctx.fillStyle=i%2?'rgba(60,52,45,.08)':'rgba(255,255,245,.22)';ctx.fillRect(x,y,1,1);}ctx.strokeStyle='#ada99b';ctx.lineWidth=2;for(let y=0;y<=256;y+=64){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(256,y);ctx.stroke();for(let x=(y/64%2)*64;x<256;x+=128){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+64);ctx.stroke();}}});
+  tiled('Salt weathered granite blocks',stone,256,ctx=>{ctx.fillStyle='#aaa99e';ctx.fillRect(0,0,256,256);let s=37;for(let i=0;i<7000;i++){s=(s*1664525+1013904223)>>>0;const x=s%256;s=(s*1664525+1013904223)>>>0;ctx.fillStyle=i%3?'rgba(50,56,48,.10)':'rgba(245,240,224,.35)';ctx.fillRect(x,s%256,2,1);}ctx.strokeStyle='#858b81';ctx.lineWidth=3;for(let y=0;y<=256;y+=64){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(256,y);ctx.stroke();for(let x=(y/64%2)*64;x<256;x+=128){ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x,y+64);ctx.stroke();}}});
   const wallMats = ['#eee1c8'].map((c,i)=>{
     const m=makeMat(`Facade palette ${i}`,c);
     const t = new DynamicTexture(`Shared window tile ${i}`,{width:128,height:128},scene,true,Texture.TRILINEAR_SAMPLINGMODE); t.anisotropicFilteringLevel=8;textures.push(t);
@@ -48,7 +55,7 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
       // Babylon's left-handed default uses clockwise front faces and its normal generator follows that convention.
       this.indices.push(n,n+2,n+1); for(const p of uv)this.uvs.push(...p);for(let i=0;i<3;i++)this.colors.push(this.tint.r,this.tint.g,this.tint.b,1);
     }
-    quad(a:Vector3,b:Vector3,c:Vector3,d:Vector3,uv:[number,number][]=[[0,0],[1,0],[1,1],[0,1]]) {this.tri(a,b,c,[uv[0],uv[1],uv[2]]);this.tri(a,c,d,[uv[0],uv[2],uv[3]]);}
+    quad(a:Vector3,b:Vector3,c:Vector3,d:Vector3,uv?:[number,number][]) {uv??=this.mat===stone?[[0,0],[0,Vector3.Distance(a,b)/1.6],[Vector3.Distance(b,c)/1.6,Vector3.Distance(a,b)/1.6],[Vector3.Distance(b,c)/1.6,0]]:[[0,0],[1,0],[1,1],[0,1]];this.tri(a,b,c,[uv[0],uv[1],uv[2]]);this.tri(a,c,d,[uv[0],uv[2],uv[3]]);}
     box(center:Vector3,sx:number,sy:number,sz:number,angle=0) {
       const v=(x:number,y:number,z:number)=>new Vector3(center.x+x*Math.cos(angle)+z*Math.sin(angle),center.y+y,center.z-x*Math.sin(angle)+z*Math.cos(angle));
       const a=sx/2,b=sy/2,c=sz/2;
@@ -63,6 +70,7 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
       const a=i/sides*Math.PI*2,b=(i+1)/sides*Math.PI*2;
       this.quad(new Vector3(c.x+Math.cos(a)*r,c.y-h/2,c.z+Math.sin(a)*r),new Vector3(c.x+Math.cos(a)*r,c.y+h/2,c.z+Math.sin(a)*r),new Vector3(c.x+Math.cos(b)*r,c.y+h/2,c.z+Math.sin(b)*r),new Vector3(c.x+Math.cos(b)*r,c.y-h/2,c.z+Math.sin(b)*r));
     }}
+    tube(a:Vector3,b:Vector3,r:number,sides=6){const along=b.subtract(a).normalize(),ref=Math.abs(along.y)>.95?Vector3.Right():Vector3.Up(),u=Vector3.Cross(along,ref).normalize().scale(r),v=Vector3.Cross(along,u).normalize().scale(r);const point=(c:Vector3,t:number)=>c.add(u.scale(Math.cos(t))).add(v.scale(Math.sin(t)));for(let i=0;i<sides;i++){const t=i*Math.PI*2/sides,q=(i+1)*Math.PI*2/sides;this.quad(point(a,t),point(b,t),point(b,q),point(a,q));}}
     finish(meta?:any,cast=false){if(!this.positions.length)return undefined;const mesh=new Mesh(this.name,scene);const vd=new VertexData();vd.positions=this.positions;vd.indices=this.indices;vd.uvs=this.uvs;vd.colors=this.colors;const normals:number[]=[];VertexData.ComputeNormals(this.positions,this.indices,normals);vd.normals=normals;vd.applyToMesh(mesh);mesh.material=this.mat;mesh.receiveShadows=true;mesh.metadata=meta;owned.push(mesh);reflectionMeshes.push(mesh);if(cast)shadows.addShadowCaster(mesh);return mesh;}
   }
   const clean=(p:P[])=>{const q=p.slice();if(q.length>2&&Math.hypot(q[0][0]-q[q.length-1][0],q[0][1]-q[q.length-1][1])<.01)q.pop();return q;};
@@ -118,10 +126,12 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
     const gx=Math.floor(cx/500),gz=Math.floor(cz/500),key=`${gx}:${gz}:${index}`;
     if(!map.has(key))map.set(key,new Batch(`${kind} chunk ${gx} ${gz} palette ${index}`,m));return map.get(key)!;
   };
+  const station=buildStation(scene,data,shadows,terrain);
+  collisionMeshes.push(...station.collisionMeshes);
   let buildingCount=0,colliderCount=0;
   for(const f of (data.buildings||[]) as Feature[]){if(!f.polygon||f.polygon.length<3)continue;const p=clean(f.polygon),h=f.height||12,k=hash(f.id),cx=p.reduce((s,q)=>s+q[0],0)/p.length,cz=p.reduce((s,q)=>s+q[1],0)/p.length;
     // Huilan Pavilion is modeled separately from its surveyed footprint.
-    if(/回澜|huilan/i.test(f.name||f.tags?.name||''))continue;
+    if(/回澜|huilan/i.test(f.name||f.tags?.name||'')||station.excludedIds.has(String(f.id)))continue;
     // Keep a level roof above the highest sampled footprint point; foundation walls reach down into the slope.
     let base=terrain(cx,cz);if(sampleHeight){for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length],steps=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/15));for(let j=0;j<=steps;j++)base=Math.max(base,terrain(a[0]+(b[0]-a[0])*j/steps,a[1]+(b[1]-a[1])*j/steps));}
       const minX=Math.min(...p.map(v=>v[0])),maxX=Math.max(...p.map(v=>v[0])),minZ=Math.min(...p.map(v=>v[1])),maxZ=Math.max(...p.map(v=>v[1]));for(let x=minX;x<=maxX;x+=Math.max(20,(maxX-minX)/8))for(let z=minZ;z<=maxZ;z+=Math.max(20,(maxZ-minZ)/8))if(inside(x,z,p))base=Math.max(base,terrain(x,z));}
@@ -149,38 +159,30 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
   if(pier?.points&&pier.points.length>=2)axis=pier.points;
   else if(pier?.polygon){const p=clean(pier.polygon);const cx=p.reduce((s,q)=>s+q[0],0)/p.length,cz=p.reduce((s,q)=>s+q[1],0)/p.length;let xx=0,zz=0,xz=0;for(const q of p){xx+=(q[0]-cx)**2;zz+=(q[1]-cz)**2;xz+=(q[0]-cx)*(q[1]-cz);}const angle=.5*Math.atan2(2*xz,xx-zz);const dx=Math.cos(angle),dz=Math.sin(angle);const projections=p.map(q=>(q[0]-cx)*dx+(q[1]-cz)*dz);const lo=Math.min(...projections),hi=Math.max(...projections);axis=[[cx+lo*dx,cz+lo*dz],[cx+hi*dx,cz+hi*dz]];}
   if(axis){if(axis[0][1]<axis[axis.length-1][1])axis=axis.slice().reverse();pierStart=new Vector3(axis[0][0],PIER+.16,axis[0][1]);if(!landmarkPoint)pavilionPosition=new Vector3(axis[axis.length-1][0],PIER,axis[axis.length-1][1]);}
-  const bridgeDeck=new Batch('Zhanqiao surveyed pier deck',pavement), masonry=new Batch('Zhanqiao stone approach',stone), supports=new Batch('Zhanqiao open sea piers',stone), rails=new Batch('Zhanqiao balustrades',railMat);
+  const bridgeDeck=new Batch('Zhanqiao surveyed pier deck',pavement), masonry=new Batch('Zhanqiao stone approach',stone), supports=new Batch('Zhanqiao open sea piers',stone), rails=new Batch('Zhanqiao metal railings',railMat),guardCollider=new Batch('Zhanqiao safety boundary collision',stone),lamps=new Batch('Zhanqiao lotus lamp posts',lampMat),globes=new Batch('Zhanqiao lotus lamp glass',globeMat);
   if(pier?.polygon){flat(bridgeDeck,pier.polygon,PIER+.16);walls(bridgeDeck,pier.polygon,PIER-.24,.4);}
   else if(axis)ribbon(bridgeDeck,axis,8,PIER+.16);
   if(axis){let cumulative=0;const total=axis.slice(1).reduce((s,p,i)=>s+Math.hypot(p[0]-axis![i][0],p[1]-axis![i][1]),0);
     for(let i=0;i<axis.length-1;i++){const a=axis[i],b=axis[i+1],dx=b[0]-a[0],dz=b[1]-a[1],len=Math.hypot(dx,dz);if(len<.1)continue;const angle=Math.atan2(dx,dz),nx=-dz/len,nz=dx/len;
       const solidLength=Math.max(0,Math.min(len,total*.58-cumulative));if(solidLength>0)masonry.box(new Vector3(a[0]+dx*solidLength/len/2,(PIER-3)/2,a[1]+dz*solidLength/len/2),7.8,PIER+3,solidLength,angle);
-      for(let d=0;d<len;d+=3.8){const x=a[0]+dx*d/len,z=a[1]+dz*d/len;for(const side of [-1,1]){rails.box(new Vector3(x+nx*3.85*side,PIER+.76,z+nz*3.85*side),.27,1.25,.27);}
+      for(let d=0;d<len;d+=3.8){const x=a[0]+dx*d/len,z=a[1]+dz*d/len;
         if(cumulative+d>total*.58&&Math.round(d/3.8)%3===0)for(const side of [-1,1])supports.cylinder(new Vector3(x+nx*2.65*side,(PIER-.24-3)/2,z+nz*2.65*side),.52,PIER-.24+3,8);
       }
-      for(const side of [-1,1]){const center=new Vector3((a[0]+b[0])/2+nx*3.85*side,PIER+1.35,(a[1]+b[1])/2+nz*3.85*side);rails.box(center,.2,.2,len,angle);rails.box(center.subtract(new Vector3(0,.55,0)),.15,.15,len,angle);}
+      // The pier outline supplies the actual rail boundary, including the flared breakwater.
+      for(let d=18;d<len-30;d+=28)for(const side of [-1,1]){const c=new Vector3(a[0]+dx*d/len+nx*3.6*side,PIER,a[1]+dz*d/len+nz*3.6*side);lamps.cylinder(c.add(new Vector3(0,.25,0)),.20,.5,10);lamps.cylinder(c.add(new Vector3(0,2.2,0)),.065,3.9,8);lamps.cylinder(c.add(new Vector3(0,4.14,0)),.25,.18,12);for(let p=0;p<8;p++){const t=p*Math.PI/4,q=t+Math.PI/4,point=(r:number,y:number,ang:number)=>c.add(new Vector3(Math.cos(ang)*r,y,Math.sin(ang)*r));globes.quad(point(.10,4.17,t),point(.35,4.43,t),point(.35,4.43,q),point(.10,4.17,q));globes.quad(point(.35,4.43,t),point(.12,4.72,t),point(.12,4.72,q),point(.35,4.43,q));}lamps.cylinder(c.add(new Vector3(0,4.78,0)),.045,.15,6);}
       cumulative+=len;
     }
   }
+  if(pier?.polygon){const p=clean(pier.polygon);for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length];if((a[1]+b[1])/2>142)continue;const len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len<.4)continue;const angle=Math.atan2(b[0]-a[0],b[1]-a[1]);guardCollider.box(new Vector3((a[0]+b[0])/2,PIER+.8,(a[1]+b[1])/2),.12,1.3,len,angle);const count=Math.max(1,Math.ceil(len/2.5));for(let k=0;k<=count;k++){const x=a[0]+(b[0]-a[0])*k/count,z=a[1]+(b[1]-a[1])*k/count;rails.cylinder(new Vector3(x,PIER+.76,z),.065,1.18,8);rails.cylinder(new Vector3(x,PIER+1.39,z),.10,.08,8);}for(const y of [.37,1.3])rails.box(new Vector3((a[0]+b[0])/2,PIER+y,(a[1]+b[1])/2),.055,.065,len,angle);for(let k=.35;k<len;k+=.35)rails.box(new Vector3(a[0]+(b[0]-a[0])*k/len,PIER+.84,a[1]+(b[1]-a[1])*k/len),.026,.88,.026);}}
+  bridgeDeck.uvs=bridgeDeck.uvs.map(v=>v*20/2.4);
   const deckMesh=bridgeDeck.finish({kind:'zhanqiao',name:'栈桥',source:'OSM pier plan geometry; deck altitude is approximate',osmId:pier?.id},true);if(deckMesh)collisionMeshes.push(deckMesh);
-  masonry.finish({kind:'pier-structure',source:'Procedural interpretation of stone approach'},true);supports.finish({kind:'pier-supports',source:'Approximate structural placement'},true);const railMesh=rememberDetail(rails.finish({kind:'pier-railings',source:'Approximate balustrade spacing'},true),2300);if(railMesh)collisionMeshes.push(railMesh);
+  masonry.finish({kind:'pier-structure',source:'Procedural interpretation of stone approach'},true);supports.finish({kind:'pier-supports',source:'Approximate structural placement'},true);const railMesh=rememberDetail(rails.finish({kind:'pier-railings',source:'Approximate balustrade spacing'},true),2300);const safety=guardCollider.finish({kind:'pier-collider'});if(safety){safety.isVisible=false;collisionMeshes.push(safety);}
+  rememberDetail(lamps.finish({kind:'pier-lamps',name:'栈桥莲花路灯',source:'Photo-referenced lotus silhouette; spacing and pole heights estimated'},true),1600);rememberDetail(globes.finish({kind:'pier-lamp-glass'},false),1600);
 
-  // Landmark model: characteristic double octagonal green flying eaves and vermilion pillars.
-  if(axis||landmarkPoint){const c=pavilionPosition.clone(),platform=new Batch('Huilan pavilion octagonal terrace',stone),pavilion=new Batch('Huilan pavilion columns',red),roofs=new Batch('Huilan pavilion double green eaves',green),detail=new Batch('Huilan pavilion finial and trim',gold),terraceRail=new Batch('Huilan pavilion terrace railing',railMat);
-    const oct=(radius:number)=>Array.from({length:8},(_,i)=>[c.x+Math.cos(i*Math.PI/4+Math.PI/8)*radius,c.z+Math.sin(i*Math.PI/4+Math.PI/8)*radius] as P);
-    const footprint=oct(13);flat(platform,footprint,PIER+.2);walls(platform,footprint,-.8,PIER+1);
-    for(let i=0;i<8;i++){const a=i*Math.PI/4+Math.PI/8;const x=c.x+Math.cos(a)*6.7,z=c.z+Math.sin(a)*6.7;pavilion.cylinder(new Vector3(x,PIER+2.75,z),.33,5.1);pavilion.cylinder(new Vector3(c.x+Math.cos(a)*4.8,PIER+7.4,c.z+Math.sin(a)*4.8),.22,3.1);}
-    const lower=oct(6.6);for(let i=0;i<8;i++){const a=lower[i],b=lower[(i+1)%8],len=Math.hypot(b[0]-a[0],b[1]-a[1]);pavilion.box(new Vector3((a[0]+b[0])/2,PIER+4.5,(a[1]+b[1])/2),.3,.45,len,Math.atan2(b[0]-a[0],b[1]-a[1]));}
-    const curvedRoof=(radius:number,base:number,rise:number)=>{const rings=[{r:radius,y:base+.32},{r:radius*.91,y:base},{r:radius*.66,y:base+rise*.36},{r:radius*.34,y:base+rise*.73},{r:.38,y:base+rise}];
-      for(let j=0;j<rings.length-1;j++)for(let i=0;i<8;i++){const angle=i*Math.PI/4+Math.PI/8,next=(i+1)*Math.PI/4+Math.PI/8;const point=(k:number,a:number)=>new Vector3(c.x+Math.cos(a)*rings[k].r,rings[k].y,c.z+Math.sin(a)*rings[k].r);roofs.quad(point(j,angle),point(j+1,angle),point(j+1,next),point(j,next));}
-      detail.cylinder(new Vector3(c.x,base+rise+.46,c.z),.25,.92);};
-    curvedRoof(9.2,PIER+4.8,2.3);curvedRoof(6.7,PIER+8.0,2.6);
-    const terrace=oct(12.4);for(let i=0;i<8;i++){const a=terrace[i],b=terrace[(i+1)%8],len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(Math.abs((a[1]+b[1])/2-c.z)<10||((a[1]+b[1])/2<c.z)){terraceRail.box(new Vector3((a[0]+b[0])/2,PIER+1.3,(a[1]+b[1])/2),.2,.18,len,Math.atan2(b[0]-a[0],b[1]-a[1]));for(let t=0;t<=len;t+=2)terraceRail.box(new Vector3(a[0]+(b[0]-a[0])*t/len,PIER+.8,a[1]+(b[1]-a[1])*t/len),.28,1.1,.28);}}
-    const pm=platform.finish({kind:'pavilion-platform',name:'回澜阁平台',source:'OSM pavilion position; approximate octagonal terrace'},true);if(pm)collisionMeshes.push(pm);
-    pavilion.finish({kind:'landmark',name:'回澜阁',source:'Parametric architectural interpretation; not survey-grade'},true);roofs.finish({kind:'landmark-roof',name:'回澜阁',source:'Parametric green double octagonal flying eaves'},true);detail.finish({kind:'landmark-trim'},true);rememberDetail(terraceRail.finish({kind:'landmark-railing'},true),2300);
-  }
+  const pavilion=buildPavilion(scene,pavilionPosition,shadows);
+  reflectionMeshes.push(...pavilion.meshes);collisionMeshes.push(...pavilion.collisionMeshes);
   // Freeze static transforms; all city geometry is grouped by shared material.
-  for(const mesh of owned)mesh.freezeWorldMatrix();
+  for(const mesh of [...owned,...station.meshes,...pavilion.meshes])mesh.freezeWorldMatrix();
   const reflected=reflectionMeshes.filter(m=>m.isVisible&&(m.name.startsWith('Zhanqiao')||m.name.startsWith('Huilan')));
-  return {reflectionMeshes:reflected,collisionMeshes,pierStart,pavilionPosition,stats:{buildings:buildingCount,roads:(data.roads||[]).length},setDetail(distance:number){for(const item of details)item.mesh.setEnabled(distance<item.maxDistance);},dispose(){for(const m of owned)m.dispose();for(const m of materials)m.dispose();for(const t of textures)t.dispose();}};
+  return {reflectionMeshes:reflected,collisionMeshes,pierStart,pavilionPosition,stationPosition:station.position,stats:{buildings:buildingCount,roads:(data.roads||[]).length},setDetail(distance:number){for(const item of details)item.mesh.setEnabled(distance<item.maxDistance);},dispose(){station.dispose();pavilion.dispose();for(const m of owned)m.dispose();for(const m of materials)m.dispose();for(const t of textures)t.dispose();}};
 }
