@@ -11,21 +11,29 @@ import { createTerrain, type Region } from './terrain';
 import { createRegional } from './regional';
 import { attachMapControls } from './map-controls';
 import { buildHillParks } from './hill-parks';
-import { buildHeritageBuildings } from './heritage-buildings';
+import { createHeritageSurface, buildHeritageBuildings } from './heritage-buildings';
 import { buildBayBridge } from './bay-bridge';
 import { buildFushan } from './fushan';
+
+import {buildBeaches,createBeachSurface} from './beaches';
+import {buildCityOverview} from './city-overview';
+import {buildMetro} from './metro';
+import {createLandmarkLabels} from './landmark-labels';
+import {stableShadowPosition} from './render-stability';
+import {buildCivicPlazas} from './civic-plazas';
+import {buildCivicBuildings} from './civic-buildings';
 
 const app=document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML=`
 <header class="topbar"><div class="brand"><div class="mark">QD</div><div class="brand-text">青岛 · 山海之城<small>QINGDAO / CITY EXPLORER</small></div></div><div class="top-actions"><div class="live-pill"><i class="dot"></i><span id="status">东八区 · 实时光照</span></div><button id="panel-toggle" aria-label="展开或收起海面与光照控制">光与海</button><button id="info">场景说明 ↗</button></div></header>
 <div class="title-block"><div class="eyebrow">36°03′ N / 120°19′ E</div><h1>海与城<br>在此相遇。</h1><p>从栈桥出发，越过山海。<br>八个区域，一座立体的城市。</p><div class="title-rule"></div><div class="coordinates">真实地理布局 · 1 单位 = 1 米</div></div>
 <nav class="modes" aria-label="探索方式"><button data-mode="orbit" class="active">◎ 观景</button><button data-mode="walk">↟ 步行</button><button data-mode="fly">↗ 飞行</button></nav><div id="guide" class="guide">左键拖拽地图 · 右键旋转 · 滚轮缩放<br>点击建筑可查看信息</div><div id="picked" class="picked"></div>
-<aside class="controls"><div class="panel-heading">光与海 <span>LIGHT & WATER</span></div><div class="segmented" aria-label="时间预览"><button data-time="12">日间</button><button data-time="sunset">日落</button><button data-time="21">夜间</button></div><div class="range-row"><label for="wave">波浪起伏 <output id="wave-output">0.65 m</output></label><input id="wave" type="range" min="0.15" max="1.5" value="0.65" step="0.05"></div><div class="range-row"><label for="wind">风浪速度 <output id="wind-output">1.0 ×</output></label><input id="wind" type="range" min="0.3" max="2" value="1" step="0.1"></div><div class="range-row"><label for="foam">沿岸泡沫 <output id="foam-output">适中</output></label><input id="foam" type="range" min="0" max="2" value="1" step="0.1"></div><div class="solar-row"><span>太阳高度角</span><strong id="sun-altitude">—</strong></div><div class="view-buttons"><button id="pier-view">回澜阁</button><button id="station-view">青岛站</button><button id="bay-view">青岛湾</button><button id="quality" aria-pressed="false">节能</button></div></aside>
+<aside class="controls"><div class="panel-heading">光与海 <span>LIGHT & WATER</span></div><div class="segmented" aria-label="时间预览"><button data-time="12">日间</button><button data-time="sunset">日落</button><button data-time="21">夜间</button></div><div class="range-row"><label for="wave">波浪起伏 <output id="wave-output">0.65 m</output></label><input id="wave" type="range" min="0.15" max="1.5" value="0.65" step="0.05"></div><div class="range-row"><label for="wind">风浪速度 <output id="wind-output">1.0 ×</output></label><input id="wind" type="range" min="0.3" max="2" value="1" step="0.1"></div><div class="range-row"><label for="foam">沿岸泡沫 <output id="foam-output">适中</output></label><input id="foam" type="range" min="0" max="2" value="1" step="0.1"></div><div class="solar-row"><span>太阳高度角</span><strong id="sun-altitude">—</strong></div><div class="effect-toggles"><button id="metro-toggle" aria-pressed="false">地铁光带</button><button id="lightshow-toggle" class="active" aria-pressed="true">滨海灯光秀</button></div><div class="view-buttons"><button id="pier-view">回澜阁</button><button id="station-view">青岛站</button><button id="bay-view">青岛湾</button><button id="quality" aria-pressed="false">节能</button></div></aside>
 <section class="timeline" aria-label="东八区时间控制"><div class="time-head"><div class="time-display"><span id="clock">--:--:--</span><small>UTC +08</small></div><button id="realtime" class="active" aria-pressed="true">● 跟随实时</button></div><input id="hours" aria-label="预览时间（北京时间）" type="range" min="0" max="23.99" step="0.01" value="12"><div class="ticks"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div><div class="time-date"><span id="date">—</span><span id="period">太阳位置由青岛经纬度计算</span></div></section>
 <nav class="districts" aria-label="区域导航"><button id="region-view">全域</button><button id="mountain-view">崂山山地</button><span id="district-list"></span></nav><aside class="mini"><div class="mini-title"><span id="map-title">青岛湾</span><span>↑ N</span></div><canvas id="minimap" width="348" height="226" aria-label="场景范围与相机位置示意图"></canvas><div class="mini-footer"><span>WGS84 · 米制场景</span><b id="map-scale">500 m ━</b></div></aside>
 <footer class="footer"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors · ODbL</a><a class="dem-credit" href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Terrain Tiles / Mapzen · DEM</a><div class="metrics"><span id="physics">Havok 加载中</span><span id="altitude">— m</span><span id="fps">— FPS</span></div></footer><div id="toast" class="toast" role="status"></div><div class="crosshair"></div>
 <div class="loading"><div class="eyebrow">QINGDAO BAY</div><h2>风从海上来</h2><div class="spinner"></div><p id="load-status">正在构建海岸与栈桥</p></div>
-<dialog id="about"><h2>青岛湾 · 栈桥</h2><p>这是一个用于后续游戏扩展的三维场景原型，支持观景、步行与自由飞行。</p><h3>地理比例与模型</h3><p id="data-summary">正在读取数据。</p><p>建筑轮廓、道路走向与海岸线来自 OSM。缺失建筑高度采用估算；地形采用 AWS / Mapzen 真实 DEM，全域网格 400 米，旧城精细网格 32 米，浮山精细网格 40 米。网格间距不代表测绘精度。周边建筑为风格化模型；回澜阁、青岛站、胶州湾大桥和老城重点建筑依据实景及建筑资料单独复原，缺少施工图的细部尺寸仍为估算。海面风浪为视觉模拟，未接入真实潮位或天气。</p><h3>地标复原依据</h3><p>回澜阁采用黄色琉璃瓦、双层八角飞檐、24根亭柱；青岛站还原黄墙红瓦、花岗岩饰面、拱券入口、半木构山墙与35米钟楼。新增信号山三座红色球形观景楼、小鱼山绿瓦三层览潮阁、总督府与迎宾馆、啤酒博物馆、大学路鱼山路红墙、海大鱼山校区代表建筑，以及胶州湾大桥三类航道桥。复原展示外观，室内未完整复原。</p><p><a href="https://www.guanhai.com.cn/p/476619.html" target="_blank" rel="noopener">青岛日报：回澜阁建筑资料</a> · <a href="https://www.dailyqd.com/arc/2016-09/22/content_352743.htm" target="_blank" rel="noopener">青岛日报：青岛站历史与现代实景</a> · <a href="/data/LANDMARKS.md" target="_blank" rel="noopener">尺寸与参考来源记录</a></p><p><a href="/data/CITY-LANDMARKS.md" target="_blank" rel="noopener">新增地标与大桥：资料、比例与估算说明</a></p><h3>光照与海面</h3><p>太阳与月亮位置按青岛经纬度、日期及绝对时间计算，时间显示固定为 Asia/Shanghai（UTC+8）。日落前后的低角度阳光会改变海面反光方向；夜间保留柔和的环境光以方便探索。</p><p>海面参考 <a href="https://github.com/mrdoob/three.js/blob/dev/examples/jsm/objects/Water.js" target="_blank" rel="noopener">Three.js 开源 Water 示例</a>的反射与菲涅耳思路，独立实现方向波、细浪、岸线泡沫与栈桥倒影。</p><h3>操作</h3><ul><li>观景：左键拖拽地图，右键旋转视角，滚轮以鼠标位置为中心平滑缩放。</li><li>步行：WASD 移动，Shift 加速，Space 跳跃；拖动视角。桌面可点击画面锁定鼠标，Esc 退出。</li><li>飞行：WASD 移动，E 上升、Q 下降，Shift 加速。属于自由飞行原型。</li></ul><button id="close-about">继续探索</button></dialog>`;
+<dialog id="about"><h2>青岛湾 · 栈桥</h2><p>这是一个用于后续游戏扩展的三维场景原型，支持观景、步行与自由飞行。</p><h3>地理比例与模型</h3><p id="data-summary">正在读取数据。</p><p>建筑轮廓、道路走向与海岸线来自 OSM。缺失建筑高度采用估算；地形采用 AWS / Mapzen 真实 DEM，全域网格 400 米，旧城精细网格 32 米，浮山精细网格 40 米、崂山精细网格 80 米。网格间距不代表测绘精度。周边建筑为风格化模型；回澜阁、青岛站、胶州湾大桥和老城重点建筑依据实景及建筑资料单独复原，缺少施工图的细部尺寸仍为估算。海面风浪为视觉模拟，未接入真实潮位或天气。</p><h3>地标复原依据</h3><p>回澜阁采用黄色琉璃瓦、双层八角飞檐、24根亭柱；青岛站还原黄墙红瓦、花岗岩饰面、拱券入口、半木构山墙与35米钟楼。新增信号山三座红色球形观景楼、小鱼山绿瓦三层览潮阁、总督府与迎宾馆、啤酒博物馆、大学路鱼山路红墙、海大鱼山校区代表建筑，以及胶州湾大桥三类航道桥。复原展示外观，室内未完整复原。新增青岛电视塔钢结构、五月的风及市政府与广场。沙滩保留真实 OSM 岸线，湿沙坡面为视觉插值。</p><p><a href="https://www.guanhai.com.cn/p/476619.html" target="_blank" rel="noopener">青岛日报：回澜阁建筑资料</a> · <a href="https://www.dailyqd.com/arc/2016-09/22/content_352743.htm" target="_blank" rel="noopener">青岛日报：青岛站历史与现代实景</a> · <a href="/data/LANDMARKS.md" target="_blank" rel="noopener">尺寸与参考来源记录</a></p><p><a href="/data/CITY-LANDMARKS.md" target="_blank" rel="noopener">新增地标与大桥：资料、比例与估算说明</a></p><h3>光照与海面</h3><p>太阳与月亮位置按青岛经纬度、日期及绝对时间计算，时间显示固定为 Asia/Shanghai（UTC+8）。日落前后的低角度阳光会改变海面反光方向；夜间亮起建筑暖窗与广场灯；滨海高楼交替播放色彩灯光秀，为视觉模拟，未接入实况。地铁光带沿 OSM 独立线路显示，不能作为最新运营范围或列车位置依据。</p><p>海面参考 <a href="https://github.com/mrdoob/three.js/blob/dev/examples/jsm/objects/Water.js" target="_blank" rel="noopener">Three.js 开源 Water 示例</a>的反射与菲涅耳思路，独立实现方向波、细浪、岸线泡沫与栈桥倒影。</p><h3>操作</h3><ul><li>观景：左键拖拽地图，右键旋转视角，滚轮以鼠标位置为中心平滑缩放。</li><li>步行：WASD 移动，Shift 加速，Space 跳跃；拖动视角。桌面可点击画面锁定鼠标，Esc 退出。</li><li>飞行：WASD 移动，E 上升、Q 下降，Shift 加速。属于自由飞行原型。</li></ul><button id="close-about">继续探索</button></dialog>`;
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const canvas=$<HTMLCanvasElement>('scene');
 let toastTimer=0;function toast(text:string){$('toast').textContent=text;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=window.setTimeout(()=>$('toast').classList.remove('show'),3200);}
@@ -47,15 +55,26 @@ async function start(){
  const response=await fetch('/data/scene.json');if(!response.ok)throw new Error('地理数据无法读取，请重新运行 npm run dev。');const data=await response.json();
  $('load-status').textContent='正在加载真实山地与八区地理分块';
  const region:Region=await (await fetch('/data/region.json')).json();
- const terrain=await createTerrain(scene,region,data);
- const [heritageData,bridgeData,regionalLand]=await Promise.all(['/data/heritage.json','/data/bay-bridge.json','/data/regional-land.json'].map(async url=>{const r=await fetch(url);if(!r.ok)throw new Error('地标数据无法读取');return r.json();}));
+ const [heritageData,bridgeData,regionalLand,beachData,overviewData,metroData,civicData]=await Promise.all(['/data/heritage.json','/data/bay-bridge.json','/data/regional-land.json','/data/beaches.json','/data/city-overview.json','/data/metro.json','/data/civic-landmarks.json'].map(async url=>{const r=await fetch(url);if(!r.ok)throw new Error('地标数据无法读取');return r.json();}));
+ let beachSurface:ReturnType<typeof createBeachSurface>;
+ const beachBounds=beachData.beaches.map((b:any)=>({minX:Math.min(...b.polygon.map((p:number[])=>p[0])),maxX:Math.max(...b.polygon.map((p:number[])=>p[0])),minZ:Math.min(...b.polygon.map((p:number[])=>p[1])),maxZ:Math.max(...b.polygon.map((p:number[])=>p[1]))}));
+ const terrain=await createTerrain(scene,region,data,raw=>{beachSurface=createBeachSurface(beachData,raw);const heritageSurface=createHeritageSurface(heritageData,raw);return(x,z)=>beachSurface.sampleSurface(x,z)??heritageSurface.sampleSurface(x,z);},beachBounds,beachData.metadata.groundCutMask,(x,z)=>beachSurface.contains(x,z));
+ const beaches=buildBeaches(scene,beachData,terrain.sample);
+ const civic=buildCivicBuildings(scene,civicData,shadows,terrain.sample);
+ const plazas=buildCivicPlazas(scene,civicData,shadows,terrain.sample);
  const parks=buildHillParks(scene,heritageData,shadows,terrain.sample);
  const heritage=buildHeritageBuildings(scene,heritageData,shadows,terrain.sample);
  const bridge=buildBayBridge(scene,bridgeData,shadows,terrain.sample);
  const fushan=buildFushan(scene,heritageData,terrain.sample);
- const replaced=new Set([...parks.excludedBuildingIds,...heritage.excludedBuildingIds]);
- const world=buildWorld(scene,data,shadows,terrain.sample,replaced);
- const regional=await createRegional(scene,region,terrain.sample,data.bounds || data.metadata.bounds,replaced,bridge.excludedRoadIds);
+ const replaced=new Set([...parks.excludedBuildingIds,...heritage.excludedBuildingIds,...civic.excludedBuildingIds,...plazas.excludedBuildingIds]);
+ const world=buildWorld(scene,data,shadows,terrain.sample,replaced,new Set([...beaches.excludedAreaIds,...plazas.excludedAreaIds]),(x,z)=>beachSurface.contains(x,z));
+ const regional=await createRegional(scene,region,terrain.sample,data.bounds || data.metadata.bounds,replaced,bridge.excludedRoadIds,new Set(civicData.coastalBuildings.map((b:any)=>b.id)));
+
+ const overview=buildCityOverview(scene,overviewData,terrain.sample,new Set([...replaced,...data.buildings.map((b:any)=>String(b.id))]),new Set(civicData.coastalBuildings.map((b:any)=>b.id)));
+ const metro=buildMetro(scene,metroData,terrain.sample);
+ let metroEnabled=false,lightShowEnabled=true;
+ $('metro-toggle').onclick=()=>{metroEnabled=!metroEnabled;$('metro-toggle').classList.toggle('active',metroEnabled);$('metro-toggle').setAttribute('aria-pressed',String(metroEnabled));toast(metroEnabled?'OSM 地铁线路光效：地下线路的地图展示':'已关闭地铁光带');};
+ $('lightshow-toggle').onclick=()=>{lightShowEnabled=!lightShowEnabled;$('lightshow-toggle').classList.toggle('active',lightShowEnabled);$('lightshow-toggle').setAttribute('aria-pressed',String(lightShowEnabled));};
 
  const sky=createSky(scene);
  const fallbackBounds={minX:-1920,minZ:-1700,maxX:2580,maxZ:1950};
@@ -64,7 +83,7 @@ async function start(){
  const physics=await HavokPhysics({locateFile:(file:string)=>file.endsWith('.wasm')?havokWasmUrl:file});
  scene.enablePhysics(new Vector3(0,-9.81,0),new HavokPlugin(true,physics));scene.getPhysicsEngine()?.setTimeStep(1/60);
  const aggregates:PhysicsAggregate[]=[];
- for(const m of [...world.collisionMeshes,...terrain.collisionMeshes,...parks.collisionMeshes,...heritage.collisionMeshes,...bridge.collisionMeshes]){try{aggregates.push(new PhysicsAggregate(m as Mesh,PhysicsShapeType.MESH,{mass:0,friction:.65,restitution:0},scene));}catch(e){console.warn('碰撞体跳过',m.name,e);}}
+ for(const m of [...world.collisionMeshes,...terrain.collisionMeshes,...parks.collisionMeshes,...heritage.collisionMeshes,...bridge.collisionMeshes,...civic.collisionMeshes,...plazas.collisionMeshes]){try{aggregates.push(new PhysicsAggregate(m as Mesh,PhysicsShapeType.MESH,{mass:0,friction:.65,restitution:0},scene));}catch(e){console.warn('碰撞体跳过',m.name,e);}}
  const walkSpawn=world.pierStart.add(new Vector3(0,2.6,0));
  const character=new PhysicsCharacterController(walkSpawn,{capsuleHeight:1.8,capsuleRadius:.3},scene);
  $('physics').textContent='Havok · 已启用';
@@ -97,16 +116,18 @@ async function start(){
  let flight:{from:Vector3;to:Vector3;fromRadius:number;toRadius:number;start:number;label:string;alpha:number;beta:number;toBeta:number;toAlpha:number}|null=null;
  function go(x:number,z:number,radius:number,label:string,toBeta=.82,toAlpha=-Math.PI/2-.4,height=terrain.sample(x,z)){landmarkNav.value=views.find(v=>v.name===label)?.id||'';document.body.classList.add('landmark-focused');setMode('orbit');const alpha=orbit.alpha;toAlpha=alpha+Math.atan2(Math.sin(toAlpha-alpha),Math.cos(toAlpha-alpha));flight={from:orbit.target.clone(),to:new Vector3(x,height,z),fromRadius:orbit.radius,toRadius:radius,start:elapsed,label,alpha,beta:orbit.beta,toBeta,toAlpha};orbit.inertialAlphaOffset=0;orbit.inertialBetaOffset=0;orbit.inertialRadiusOffset=0;toast(label);}
  $('region-view').onclick=()=>go(-3200,5000,132000,'青岛八区全域');
- $('mountain-view').onclick=()=>go(28000,12800,6200,'崂山 · 真实山地',1.13);
+ $('mountain-view').onclick=()=>go(27822.451,12722.176,4600,'崂山 · 真实山地',1.28);
  const locations:Record<string,number[]>={'市南区':[3200,500],'市北区':[3700,6000],'李沧区':[7500,14500],'崂山区':[17400,9700],'城阳区':[8500,28000],'黄岛区':[-16000,-12000],'即墨区':[7500,42000],'胶州市':[-26000,24800]};
  for(const district of region.districts){const b=document.createElement('button');b.textContent=district.name.replace(/区|市$/g,'');b.onclick=()=>{const p=locations[district.name]||district.center;go(p[0],p[1],11000,district.name);};$('district-list').append(b);}
  $('quality').onclick=()=>{qualityHigh=!qualityHigh;engine.setHardwareScalingLevel(qualityHigh?Math.max(1,window.devicePixelRatio/1.5):Math.max(1.5,window.devicePixelRatio));shadows.getShadowMap()!.refreshRate=qualityHigh?1:2;ocean.setQuality(qualityHigh);$('quality').classList.toggle('active',!qualityHigh);$('quality').setAttribute('aria-pressed',String(!qualityHigh));toast(qualityHigh?'标准画质':'已降低渲染分辨率和反射更新频率');};
  const mapControls=attachMapControls(canvas,scene,orbit,{enabled:()=>mode==='orbit',onGestureStart:()=>{flight=null;},onPick:(x,y)=>{const pick=scene.pick(x,y,m=>!!m.metadata?.source);if(pick?.hit){const m=pick.pickedMesh!.metadata;$('picked').textContent=m.name||'周边建筑';const s=document.createElement('small');s.textContent=`${m.height?Math.round(m.height)+' m · ':''}${m.estimatedHeight?'高度估算':/landmark|huilan-pavilion|heritage|hill-park|bay-bridge/.test(m.kind||'')?'资料与实景复原 · 细尺寸估算':'OSM 地理轮廓'}`;$('picked').append(s);$('picked').classList.add('visible');}else $('picked').classList.remove('visible');}});
  const landmarkNav=document.createElement('select');landmarkNav.id='landmark-nav';landmarkNav.setAttribute('aria-label','地标导航');landmarkNav.innerHTML='<option value="">选择地标，走近青岛</option>';
- const views:{id:string;name:string;position:Vector3;radius:number;beta?:number;alpha?:number}[]=[...parks.views,...heritage.views,...bridge.views.map((v,i)=>({...v,id:'bridge-'+i})),{id:'fushan',name:'浮山 · 山地公园',position:new Vector3(10525.977,terrain.sample(10525.977,3239.23),3239.23),radius:2200,beta:1.32}];
+ const views:{id:string;name:string;position:Vector3;radius:number;beta?:number;alpha?:number}[]=[...parks.views,...heritage.views,...beaches.views,...civic.views,...plazas.views,...bridge.views.map((v,i)=>({...v,id:'bridge-'+i})),{id:'fushan',name:'浮山 · 山地公园',position:new Vector3(10525.977,terrain.sample(10525.977,3239.23),3239.23),radius:1800,beta:1.35},{id:'laoshan',name:'崂山 · 巨峰',position:new Vector3(27822.451,terrain.sample(27822.451,12722.176)+30,12722.176),radius:4600,beta:1.28}];
  for(const v of views){const o=document.createElement('option');o.value=v.id;o.textContent=v.name;landmarkNav.append(o);}
  landmarkNav.onchange=()=>{const v=views.find(v=>v.id===landmarkNav.value);if(v)go(v.position.x,v.position.z,v.radius,v.name,v.beta??1.16,v.alpha??-Math.PI/2-.4,v.position.y);};
  document.querySelector('.modes')!.after(landmarkNav);
+ const labelItems=[{id:'huilan',name:'回澜阁',position:world.pavilionPosition.add(new Vector3(0,18,0)),radius:60,beta:1.35},{id:'qingdao-station',name:'青岛火车站',position:world.stationPosition.add(new Vector3(0,45,0)),radius:220,beta:1.3},...views.map(v=>({...v,position:v.position.add(new Vector3(0,18,0))}))];
+ const labels=createLandmarkLabels(scene,canvas,labelItems,v=>go(v.position.x,v.position.z,v.radius,v.name,v.beta??1.16,v.alpha??-Math.PI/2-.4,v.position.y-18));
  const shadowCandidates=(shadows.getShadowMap()?.renderList||[]).map(mesh=>{mesh.computeWorldMatrix(true);const b=mesh.getBoundingInfo().boundingBox;return {mesh,minX:b.minimumWorld.x,maxX:b.maximumWorld.x,minZ:b.minimumWorld.z,maxZ:b.maximumWorld.z};});
  let lastShadowCull=-1;
  const map=$<HTMLCanvasElement>('minimap'),ctx=map.getContext('2d')!;let mb={minX:-1400,maxX:2250,minZ:-1400,maxZ:1750};
@@ -120,7 +141,7 @@ async function start(){
  function updateSun(date:Date){solar=solarState(date);const d=solar.daylight;top.copyFrom(Color3.Lerp(new Color3(.023,.044,.085),new Color3(.15,.46,.76),d));horizon.copyFrom(Color3.Lerp(new Color3(.065,.105,.15),new Color3(.72,.87,.93),d));
   const golden=Math.max(0,1-Math.abs(solar.altitude-4)/15)*d;horizon=Color3.Lerp(horizon,new Color3(.88,.63,.41),golden*.48);sunColor=Color3.Lerp(new Color3(1,.60,.32),new Color3(1,.97,.88),Math.min(1,Math.max(0,solar.altitude)/28));
   const dir=new Vector3(solar.direction.x,solar.direction.y,solar.direction.z);sun.direction=dir.negate();sun.position=world.pavilionPosition.add(dir.scale(1100));sun.intensity=solar.sunlight>0?Math.max(.12,Math.pow(solar.sunlight,.4))*.9:0;sun.diffuse=sunColor;
-  ambient.intensity=.40+d*.16;ambient.diffuse=Color3.Lerp(new Color3(.43,.56,.78),new Color3(.91,.97,1),d);scene.fogColor=horizon;
+  ambient.intensity=.30+d*.26;ambient.diffuse=Color3.Lerp(new Color3(.43,.56,.78),new Color3(.91,.97,1),d);scene.fogColor=horizon;
   sky.update(dir,new Vector3(solar.moonDirection.x,solar.moonDirection.y,solar.moonDirection.z),top,horizon,sunColor,d,solar.moonIllumination);
   $('clock').textContent=chinaTime(date);$('date').textContent=`${chinaDateParts(date).date} · 北京时间`;$('period').textContent=solar.altitude>6?'日间':solar.altitude>-6?'晨昏':'夜间';$('sun-altitude').textContent=`${solar.altitude.toFixed(1)}°`;$<HTMLInputElement>('hours').value=String(chinaDateParts(date).hours);
  }
@@ -135,13 +156,16 @@ async function start(){
     character.setVelocity(desired);character.integrate(1/60,support,gravity);accumulator-=1/60;jump=false;}
     const p=character.getPosition();if(p.y<-4||Math.abs(p.x)>5000||Math.abs(p.z)>5000){character.setPosition(walkSpawn);character.setVelocity(Vector3.Zero());toast('已返回栈桥入口');}free.position.copyFrom(character.getPosition().add(new Vector3(0,.65,0)));}
   }
-  const active=scene.activeCamera!;scene.fogDensity=.000010/(1+Math.max(0,active.position.y)/6000);const viewTarget=mode==='orbit'?orbit.target:free.position;const detailDistance=mode==='orbit'?orbit.radius:free.position.y;world.setDetail(detailDistance);parks.setDetail(detailDistance);heritage.setDetail(detailDistance);bridge.setDetail(detailDistance,viewTarget);fushan.setDetail(detailDistance);regional.update(elapsed,active.position,viewTarget);sun.position=viewTarget.add(new Vector3(solar.direction.x,solar.direction.y,solar.direction.z).scale(1100));sun.shadowEnabled=detailDistance<4500;shadows.getShadowMap()!.refreshRate=detailDistance<4500?(qualityHigh?1:2):0;
+  const active=scene.activeCamera!;scene.fogDensity=.000010/(1+Math.max(0,active.position.y)/6000);const viewTarget=mode==='orbit'?orbit.target:free.position;const detailDistance=mode==='orbit'?orbit.radius:free.position.y;world.setDetail(detailDistance);parks.setDetail(detailDistance);heritage.setDetail(detailDistance);bridge.setDetail(detailDistance,viewTarget);fushan.setDetail(detailDistance);regional.update(elapsed,active.position,viewTarget);overview.update(regional.detailReady);terrain.setDetail(detailDistance,viewTarget);beaches.setDetail(detailDistance);civic.setDetail(detailDistance);plazas.setDetail(detailDistance);
+  const sunDir=new Vector3(solar.direction.x,solar.direction.y,solar.direction.z),night=1-solar.daylight;regional.cityMaterials.update(solar.daylight,elapsed,sunDir,horizon,lightShowEnabled);overview.materials.update(solar.daylight,elapsed,sunDir,horizon,lightShowEnabled);world.setNight(night);parks.setNight(night,elapsed);heritage.setNight(night,elapsed);civic.setNight(night,elapsed);plazas.setNight(night,elapsed);metro.update(elapsed,mode==='orbit'?orbit.radius:Math.max(800,free.position.y*3),solar.daylight,metroEnabled);
+  sun.position=stableShadowPosition(viewTarget,sunDir);sun.shadowEnabled=detailDistance<5600;shadows.setDarkness(.25+.75*Math.max(0,Math.min(1,(detailDistance-3200)/2000)));shadows.getShadowMap()!.refreshRate=detailDistance<5600?(qualityHigh?1:2):0;
+
   if(elapsed-lastShadowCull>.15){lastShadowCull=elapsed;shadows.getShadowMap()!.renderList=shadowCandidates.filter(b=>b.mesh.isEnabled()&&Math.hypot(Math.max(b.minX-viewTarget.x,0,viewTarget.x-b.maxX),Math.max(b.minZ-viewTarget.z,0,viewTarget.z-b.maxZ))<1300).map(b=>b.mesh);}
-  ocean.update(elapsed,new Vector3(solar.direction.x,solar.direction.y,solar.direction.z),sunColor,solar.daylight,top,horizon);scene.render();
+  ocean.update(elapsed,new Vector3(solar.direction.x,solar.direction.y,solar.direction.z),sunColor,solar.daylight,top,horizon);scene.render();labels.update(elapsed);
   if(elapsed-lastHUD>.5){lastHUD=elapsed;const now=realtime?new Date():chinaInstant(day,hour);if(realtime){day=chinaDateParts(now).date;hour=chinaDateParts(now).hours;}updateSun(now);$('fps').textContent=`${Math.round(engine.getFps())} FPS`;$('altitude').textContent=`${scene.activeCamera!.position.y.toFixed(1)} m`;canvas.dataset.camera=JSON.stringify({target:orbit.target.asArray(),radius:orbit.radius,alpha:orbit.alpha,beta:orbit.beta,mode});drawMap();}
  });
  window.addEventListener('resize',()=>engine.resize());
  document.querySelector<HTMLElement>('.loading')!.style.opacity='0';setTimeout(()=>document.querySelector('.loading')!.remove(),700);
- (window as any).__demo={scene,engine,world,parks,heritage,bridge,character,setMode,solar:()=>solar,data,updateSun,terrain,regional,region,version:'0.3.0'};
+ (window as any).__demo={scene,engine,world,parks,heritage,bridge,character,setMode,solar:()=>solar,data,updateSun,terrain,regional,region,beaches,civic,plazas,overview,metro,version:'0.4.0'};
 }
 start().catch(e=>{console.error(e);$('load-status').textContent=String(e.message || e);document.querySelector('.spinner')?.remove();const retry=document.createElement('button');retry.textContent='重新加载';retry.style.padding='10px 20px';retry.onclick=()=>location.reload();document.querySelector('.loading')!.append(retry);});

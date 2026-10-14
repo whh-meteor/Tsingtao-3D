@@ -29,6 +29,7 @@ export function buildHillParks(scene: Scene, data: ParkData, shadows: ShadowGene
   const lacquer = material('Xiaoyushan pink red lacquer posts', '#a55046');
   const roof = material('Xiaoyushan GREEN glazed tile roofs', '#ffffff', .16);
   const glass = material('Signal Hill panoramic window glazing', '#6c9598', .16);
+  const pavilionGlass = material('Xiaoyushan restrained interior window glazing', '#445953', .08);
   const dark = material('Hill parks dark window framing', '#34332e');
   const paint = material('Xiaoyushan marine ceramic beam patterns', '#ffffff');
   const leaf = material('Hill parks pine and broadleaf canopy', '#ffffff');
@@ -40,14 +41,18 @@ export function buildHillParks(scene: Scene, data: ParkData, shadows: ShadowGene
     t.wrapU = t.wrapV = Texture.WRAP_ADDRESSMODE; textures.push(t); return t;
   }
   stone.diffuseTexture = texture('Original Signal Hill stonework texture', 512, 256, c => {
-    c.fillStyle = '#9c8b6b'; c.fillRect(0, 0, 512, 256);
+    c.fillStyle = '#bca57e'; c.fillRect(0, 0, 512, 256);
     for (let y = 0; y < 256; y += 32) for (let x = -64; x < 512; x += 64) {
       const shade = (Math.sin(x * 13.7 + y * 41.1) + 1) * 14;
-      c.fillStyle = `rgb(${155 + shade},${140 + shade},${115 + shade})`;
+      c.fillStyle = `rgb(${175 + shade},${153 + shade},${118 + shade})`;
       c.fillRect(x + (y % 64 ? 32 : 0) + 1.5, y + 1.5, 61, 29);
       c.strokeStyle = '#c4b499'; c.lineWidth = 1; c.strokeRect(x + (y % 64 ? 32 : 0) + 2, y + 2, 60, 28);
     }
   });
+  stone.bumpTexture=texture('Original Signal Hill shallow stone-joint normal',256,256,c=>{c.fillStyle='#8080ff';c.fillRect(0,0,256,256);for(let y=0;y<256;y+=32)for(let x=-64;x<256;x+=64){const xx=x+(y%64?32:0);c.fillStyle='#9980fc';c.fillRect(xx+1,y+2,2,28);c.fillStyle='#6780fc';c.fillRect(xx+61,y+2,2,28);c.fillStyle='#8099fc';c.fillRect(xx+2,y+1,60,2);c.fillStyle='#8067fc';c.fillRect(xx+2,y+29,60,2);}});stone.bumpTexture.level=.23;
+  red.diffuseTexture=texture('Original low contrast weathered red cabin paint',256,256,c=>{c.fillStyle='#ebaa96';c.fillRect(0,0,256,256);for(let i=0;i<180;i++){c.fillStyle=i%2?'rgba(146,72,57,.035)':'rgba(255,224,194,.08)';c.fillRect((i*31)%256,(i*71)%256,6,4);}});
+  glass.diffuseColor=Color3.FromHexString('#c1cbc3');glass.specularColor.set(.28,.32,.30);glass.specularPower=90;
+  glass.diffuseTexture=texture('Original cabin glazing sky and warm interior reflection',128,256,c=>{const g=c.createLinearGradient(0,0,0,256);g.addColorStop(0,'#718c95');g.addColorStop(.24,'#a6bac0');g.addColorStop(.27,'#d4d8c8');g.addColorStop(1,'#bebfab');c.fillStyle=g;c.fillRect(0,0,128,256);c.fillStyle='rgba(250,247,222,.13)';c.fillRect(17,0,7,256);});
   roof.diffuseTexture = texture('Original green fish-theme glazed tiles', 256, 256, c => {
     c.fillStyle = '#276653'; c.fillRect(0, 0, 256, 256);
     for (let x = 0; x < 256; x += 24) {
@@ -72,7 +77,7 @@ export function buildHillParks(scene: Scene, data: ParkData, shadows: ShadowGene
   });
 
   class Batch {
-    p: number[] = []; ix: number[] = []; uv: number[] = []; color: number[] = []; tint = Color3.White();
+    p: number[] = []; ix: number[] = []; uv: number[] = []; color: number[] = []; smoothNormals:number[]=[]; tint = Color3.White();
     constructor(public name: string, public mat: StandardMaterial, public park: string, public detail = false) {}
     tri(a: Vector3, b: Vector3, c: Vector3, uv = [[0, 0], [1, 0], [0, 1]]) {
       const n = this.p.length / 3;
@@ -99,19 +104,21 @@ export function buildHillParks(scene: Scene, data: ParkData, shadows: ShadowGene
         this.tri(new Vector3(c.x,c.y+h/2,c.z),p(b,h/2),p(a,h/2));
       }
     }
-    lathe(c: Vector3, rings: [number, number][], n = 40) {
+    lathe(c: Vector3, rings: [number, number][], n = 40, smooth=false) {
       for (let k = 0; k < rings.length - 1; k++) for (let i = 0; i < n; i++) {
         const p = (j: number, ring: number) => new Vector3(c.x + rings[ring][0] * Math.cos(j * Math.PI * 2/n), c.y + rings[ring][1], c.z + rings[ring][0] * Math.sin(j * Math.PI * 2/n));
-        this.quad(p(i,k),p(i,k+1),p(i+1,k+1),p(i+1,k));
+        const first=this.p.length;
+        this.quad(p(i,k),p(i,k+1),p(i+1,k+1),p(i+1,k),[[i/n,k/(rings.length-1)],[i/n,(k+1)/(rings.length-1)],[(i+1)/n,(k+1)/(rings.length-1)],[(i+1)/n,k/(rings.length-1)]]);
+        if(smooth)for(let v=first;v<this.p.length;v+=3){const yy=this.p[v+1]-c.y,index=Math.abs(yy-rings[k][1])<.001?k:k+1,lo=Math.max(0,index-1),hi=Math.min(rings.length-1,index+1),dy=rings[hi][1]-rings[lo][1],dr=rings[hi][0]-rings[lo][0],angle=Math.atan2(this.p[v+2]-c.z,this.p[v]-c.x),normal=new Vector3(dy*Math.cos(angle),-dr,dy*Math.sin(angle)).normalize();this.smoothNormals[v]=normal.x;this.smoothNormals[v+1]=normal.y;this.smoothNormals[v+2]=normal.z;}
       }
     }
     finish(collision = false) {
       if (!this.p.length) return;
       const mesh = new Mesh(this.name, scene), vd = new VertexData(), normals: number[] = [];
       vd.positions = this.p; vd.indices = this.ix; vd.uvs = this.uv; vd.colors = this.color;
-      VertexData.ComputeNormals(this.p, this.ix, normals); vd.normals = normals; vd.applyToMesh(mesh);
+      VertexData.ComputeNormals(this.p, this.ix, normals);for(let i=0;i<this.smoothNormals.length;i++)if(Number.isFinite(this.smoothNormals[i]))normals[i]=this.smoothNormals[i];vd.normals = normals; vd.applyToMesh(mesh);
       mesh.material = this.mat; mesh.receiveShadows = true;
-      mesh.metadata = { kind: 'hill-park-landmark', name: this.park, source: 'OSM footprint, Qingdao government, Qingdao Daily photographs; architectural detail estimates' };
+      mesh.metadata = { kind: 'hill-park-landmark', name: this.park, source: 'OSM footprint, Qingdao government, Qingdao Daily photographs; architectural detail estimates',nightRole:this.mat===glass||this.mat===pavilionGlass?'warm window glazing':this.mat===label?'lettering':'unlit architecture' };
       shadows.addShadowCaster(mesh); meshes.push(mesh); if (this.detail) nearMeshes.push(mesh); if (collision) collisionMeshes.push(mesh);
     }
   }
@@ -160,22 +167,25 @@ export function buildHillParks(scene: Scene, data: ParkData, shadows: ShadowGene
     const [x,z]=signalAnchors[k],ground=sampleHeight(x,z),c=new Vector3(x,ground,z),radius=[5.08,5.6,3.58][k],stem=[5.8,7.5,4.5][k],r=radius*.60;
     sBase.cylinder(point(c,0,0,stem/2),r,stem,40);
     sBase.cylinder(point(c,0,0,.25),r+.4,.5,40);
-    const cy=stem+radius*.64;
-    const rings:[number,number][]=[];
-    for(let j=0;j<=20;j++) {const a=-Math.PI/2+j*Math.PI/20; rings.push([Math.max(.025,Math.cos(a)*radius),cy+Math.sin(a)*radius*.88]);}
-    // Red upper/lower shells separated by the photographed continuous glass belt.
-    const low=rings.filter(p=>p[1]<cy-.65),upper=rings.filter(p=>p[1]>cy+.72);
-    low.push([radius*.985,cy-.65]);upper.unshift([radius*.985,cy+.72]);
-    sPod.lathe(c,low,48);sPod.lathe(c,upper,48);
-    sGlass.lathe(c,[[radius*.985,cy-.65],[radius,cy],[radius*.985,cy+.72]],48);
+    const bottom=stem+.78,glassBottom=bottom+radius*.45,glassHeight=radius*.36,glassTop=glassBottom+glassHeight;
+    // 2022 original photo: a rounded lower bowl, broad two-part glazing belt, shallow upper dome.
+    const low:[number,number][]=[[radius*.58,bottom],[radius*.73,bottom+radius*.12],[radius*.89,bottom+radius*.28],[radius*.98,glassBottom-.25],[radius,glassBottom]];
+    const upper:[number,number][]=[];for(let j=0;j<=24;j++){const angle=j*Math.PI/48;upper.push([Math.max(.025,Math.cos(angle)*radius*.985),glassTop+Math.sin(angle)*radius*.54]);}
+    sPod.lathe(c,low,64,true);sPod.lathe(c,upper,64,true);
+    sGlass.lathe(c,[[radius,glassBottom],[radius*.985,glassTop]],64,true);
+    for(const yy of [glassBottom,glassBottom+glassHeight*.73,glassTop])sFrames.lathe(c,[[radius*1.008,yy-.055],[radius*1.008,yy+.055]],64,true);
     for(let i=0;i<40;i++) {
-      const a=i*Math.PI/20;sFrames.beam(point(c,radius*1.002,a,cy-.68),point(c,radius*1.002,a,cy+.75),.10,.10);
-      if(i%2===0) sSupport.beam(point(c,r+.05,a,stem-.3),point(c,radius*.68,a,stem+.75),.20,.20);
+      const a=i*Math.PI/20;sFrames.beam(point(c,radius*1.008,a,glassBottom-.05),point(c,radius*.993,a,glassTop+.04),.09,.09);
+      // Dense vertical radial plates stay outside the bowl, rather than diagonal bars hidden inside it.
+      sSupport.box(point(c,r+.31,a,stem+.40),.11,1.10,.91,Math.PI/2-a);
     }
     for(let level=0;level<2;level++)for(let i=0;i<6;i++) {
       const a=i*Math.PI/3,yy=level*2.6+.6,half=.57;
       const winPoint=(t:number,y:number)=>point(c,r+.012,a+t,yy+y);
-      sFrames.quad(winPoint(-half/r,0),winPoint(-half/r,1.35),winPoint(half/r,1.35),winPoint(half/r,0));
+      sGlass.quad(winPoint(-half/r,0),winPoint(-half/r,1.35),winPoint(half/r,1.35),winPoint(half/r,0));
+      for(let j=0;j<16;j++){const aa=j*Math.PI/16,bb=(j+1)*Math.PI/16;sGlass.tri(winPoint(0,1.35),winPoint(Math.cos(bb)*half/r,1.35+Math.sin(bb)*.50),winPoint(Math.cos(aa)*half/r,1.35+Math.sin(aa)*.50));}
+      for(const t of [-.4,0,.4])sFrames.beam(winPoint(t/r,.1),winPoint(t/r,1.36),.045,.045);
+      for(const yy of [.48,1.14])sFrames.beam(winPoint(-half/r,yy),winPoint(half/r,yy),.045,.045);
       // Segmental stone arch surround, following the masonry in the reference photo.
       for(let j=0;j<10;j++) {
         const t=j*Math.PI/10,t2=(j+1)*Math.PI/10;
@@ -198,7 +208,7 @@ export function buildHillParks(scene: Scene, data: ParkData, shadows: ShadowGene
   // The neighbouring OSM footprint is the connected pavilion/corridor complex.
   const annex=data.buildings.find(b=>String(b.id)==='way/556464067');if(annex)excludedBuildingIds.add(annex.id);
   const c=new Vector3(lanchao[0],sampleHeight(...lanchao),lanchao[1]);
-  const xBase=new Batch('Xiaoyushan Lanchao octagonal platform and white balustrades',cream,'小鱼山'),xWood=new Batch('Xiaoyushan Lanchao red columns and carved lattice',lacquer,'小鱼山'),xRoofs=new Batch('Xiaoyushan Lanchao THREE GREEN octagonal roofs',roof,'小鱼山'),xPaint=new Batch('Xiaoyushan marine ceramic painted beam bands',paint,'小鱼山'),xGlass=new Batch('Xiaoyushan Lanchao hall dark window panels',dark,'小鱼山'),xSign=new Batch('Xiaoyushan 览潮阁 traditional plaque',label,'小鱼山'),xDetail=new Batch('Xiaoyushan fish-head eaves and ivory rafters',cream,'小鱼山',true);
+  const xBase=new Batch('Xiaoyushan Lanchao octagonal platform and white balustrades',cream,'小鱼山'),xWood=new Batch('Xiaoyushan Lanchao red columns and carved lattice',lacquer,'小鱼山'),xRoofs=new Batch('Xiaoyushan Lanchao THREE GREEN octagonal roofs',roof,'小鱼山'),xPaint=new Batch('Xiaoyushan marine ceramic painted beam bands',paint,'小鱼山'),xGlass=new Batch('Xiaoyushan Lanchao hall dark window panels',pavilionGlass,'小鱼山'),xSign=new Batch('Xiaoyushan 览潮阁 traditional plaque',label,'小鱼山'),xDetail=new Batch('Xiaoyushan fish-head eaves and ivory rafters',cream,'小鱼山',true);
   function curvedRoof(center:Vector3,sides:number,radius:number,eave:number,rise:number) {
     const rings:[[number,number],[number,number],[number,number],[number,number],[number,number]]=[[1,0],[.83,-.18],[.60,.17],[.29,rise*.55],[.025,rise]];
     const start=Math.PI/8;
@@ -263,5 +273,5 @@ export function buildHillParks(scene: Scene, data: ParkData, shadows: ShadowGene
   [xBase,xWood,xRoofs,xPaint,xGlass,xSign,xDetail].forEach(b=>b.finish(b===xBase));
   views.push({id:'xiaoyu-hill',name:'小鱼山公园',position:c.add(new Vector3(0,8,0)),radius:135,alpha:-2.1,beta:1.05});
   parkLandscape('xiaoyu','小鱼山公园',[lanchao,[west.x,west.z],[east.x,east.z]]);
-  return {meshes,collisionMeshes,excludedBuildingIds,views,setDetail(distance:number){for(const mesh of nearMeshes)mesh.setEnabled(distance<2800);},dispose(){for(const m of meshes){shadows.removeShadowCaster(m);m.dispose();}for(const m of materials)m.dispose();for(const t of textures)t.dispose();}};
+  return {meshes,collisionMeshes,excludedBuildingIds,views,setDetail(distance:number){for(const mesh of nearMeshes)mesh.setEnabled(distance<1600);},setNight(strength:number,_time=0){const s=Math.max(0,Math.min(1,strength));glass.emissiveColor.set(.17*s,.13*s,.065*s);pavilionGlass.emissiveColor.set(.18*s,.12*s,.055*s);label.emissiveColor.set(.08*s,.065*s,.025*s);},dispose(){for(const m of meshes){shadows.removeShadowCaster(m);m.dispose();}for(const m of materials)m.dispose();for(const t of textures)t.dispose();}};
 }

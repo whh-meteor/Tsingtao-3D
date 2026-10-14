@@ -11,7 +11,7 @@ export function zoomRadius(radius:number,pixels:number,min:number,max:number){re
 export function attachMapControls(canvas:HTMLCanvasElement,scene:Scene,camera:ArcRotateCamera,options:{enabled:()=>boolean;onGestureStart:()=>void;onPick:(x:number,y:number)=>void}){
  let drag:{id:number;startX:number;startY:number;lastX:number;lastY:number;height:number;anchor:{x:number;z:number}|null;moved:boolean}|null=null;
  let zoom:{radius:number;x:number;y:number;height:number;anchor:{x:number;z:number}|null}|null=null;
- const point=(x:number,y:number,height:number)=>{camera.getViewMatrix(true);const r=scene.createPickingRay(x,y,Matrix.Identity(),camera);return intersectMapPlane(r.origin,r.direction,height);};
+ const point=(x:number,y:number,height:number)=>{camera.getViewMatrix(true);const r=scene.createPickingRay(x,y,Matrix.Identity(),camera);const q=intersectMapPlane(r.origin,r.direction,height);return q&&Math.hypot(q.x-camera.target.x,q.z-camera.target.z)<camera.radius*4?q:null;};
  const local=(e:{clientX:number;clientY:number})=>{const b=canvas.getBoundingClientRect();return{x:e.clientX-b.left,y:e.clientY-b.top};};
  const flush=()=>{camera.inertialAlphaOffset=0;camera.inertialBetaOffset=0;camera.inertialRadiusOffset=0;camera.inertialPanningX=0;camera.inertialPanningY=0;};
  const anchorAt=(anchor:{x:number;z:number}|null,x:number,y:number,height:number)=>{if(!anchor)return;const q=point(x,y,height);if(q)camera.setTarget(camera.target.add(new Vector3(anchor.x-q.x,0,anchor.z-q.z)),false,true,true);};
@@ -41,7 +41,7 @@ export function attachMapControls(canvas:HTMLCanvasElement,scene:Scene,camera:Ar
   if(!options.enabled())return;
   e.preventDefault();e.stopImmediatePropagation();options.onGestureStart();flush();
   const p=local(e),pixels=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?canvas.clientHeight:1),height=camera.target.y;
-  zoom={radius:zoomRadius(zoom?.radius??camera.radius,pixels,camera.lowerRadiusLimit??20,camera.upperRadiusLimit??190000),...p,height,anchor:point(p.x,p.y,height)};
+  const retained=zoom&&Math.hypot(zoom.x-p.x,zoom.y-p.y)<2?zoom:null;zoom={radius:zoomRadius(zoom?.radius??camera.radius,pixels,camera.lowerRadiusLimit??20,camera.upperRadiusLimit??190000),...p,height:retained?.height??height,anchor:retained?retained.anchor:point(p.x,p.y,height)};
  };
  const context=(e:Event)=>e.preventDefault();
  canvas.addEventListener('pointerdown',down,true);canvas.addEventListener('pointermove',move,true);canvas.addEventListener('pointerup',up,true);canvas.addEventListener('pointercancel',up,true);canvas.addEventListener('wheel',wheel,{capture:true,passive:false});canvas.addEventListener('contextmenu',context);

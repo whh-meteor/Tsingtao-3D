@@ -8,7 +8,7 @@ type Feature = {id: string | number; name?: string; polygon?: P[]; holes?: P[][]
 const LAND = 2.4;
 
 /** Geographic coordinates are local ENU metres: Babylon X east, Z north. */
-export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sampleHeight?: (x:number,z:number)=>number, excludedBuildingIds=new Set<string>()) {
+export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sampleHeight?: (x:number,z:number)=>number, excludedBuildingIds=new Set<string>(),excludedAreaIds=new Set<string>(),beachContains:(x:number,z:number)=>boolean=()=>false) {
   const owned: AbstractMesh[] = [], materials: StandardMaterial[] = [], textures: Texture[] = [];
   const reflectionMeshes: AbstractMesh[] = [], collisionMeshes: AbstractMesh[] = [];
   const terrain=(x:number,z:number)=>{const h=sampleHeight?.(x,z);return typeof h==='number'&&Number.isFinite(h)?h:LAND;};
@@ -40,7 +40,7 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
     ctx.fillStyle='#adc0be'; ctx.fillRect(39,31,23,28); ctx.fillStyle='#9bafaf'; ctx.fillRect(66,31,23,28);
     ctx.fillStyle=c; ctx.fillRect(62,28,4,66); ctx.fillRect(36,60,56,4);
     ctx.fillStyle='#b5b1a5'; ctx.fillRect(33,94,63,5); ctx.fillStyle='rgba(100,93,78,0.12)'; ctx.fillRect(0,122,128,2);
-    t.update(false); t.wrapU=Texture.WRAP_ADDRESSMODE; t.wrapV=Texture.WRAP_ADDRESSMODE; m.diffuseTexture=t; m.diffuseColor=Color3.White();return m;
+    const e=new DynamicTexture(`Night window mask ${i}`,{width:128,height:128},scene,true,Texture.TRILINEAR_SAMPLINGMODE);const ec=e.getContext();ec.fillStyle='#000';ec.fillRect(0,0,128,128);ec.fillStyle='#ffe8b0';ec.fillRect(39,31,23,28);ec.fillRect(66,31,23,28);ec.fillRect(39,64,23,27);ec.fillRect(66,64,23,27);e.update(false);e.wrapU=e.wrapV=Texture.WRAP_ADDRESSMODE;textures.push(e);m.emissiveTexture=e;m.emissiveColor=Color3.Black();t.update(false); t.wrapU=Texture.WRAP_ADDRESSMODE; t.wrapV=Texture.WRAP_ADDRESSMODE; m.diffuseTexture=t; m.diffuseColor=Color3.White();return m;
   });
   // Per-building vertex tints keep the whole city to two shared material batches per chunk.
   const facadeTint=['#ffffff','#e9eced','#e4e9ed','#f2e2d5','#d5e5ef'].map(Color3.FromHexString);
@@ -91,7 +91,7 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
   const landBatch=new Batch('OSM coastline land',landMat), retaining=new Batch('OSM sea walls',stone), tidal=new Batch('Sea wall foot',sandMat);
   if(!sampleHeight)for(const f of (data.land||[]) as Feature[]){if(!f.polygon)continue;flat(landBatch,f.polygon,LAND,f.holes);walls(landBatch,f.polygon,-3,LAND+3);}
   const ground=landBatch.finish({kind:'land',source:'OSM coastline; flat elevation 2.4 m is a demo assumption'});if(ground)collisionMeshes.push(ground);
-  for(const f of (data.coastlines||[]) as Feature[]){if(!f.points)continue;for(let i=0;i<f.points.length-1;i++){const a=f.points[i],b=f.points[i+1];retaining.quad(new Vector3(a[0],-.5,a[1]),new Vector3(a[0],Math.max(.5,terrain(...a)),a[1]),new Vector3(b[0],Math.max(.5,terrain(...b)),b[1]),new Vector3(b[0],-.5,b[1]));}ribbon(tidal,f.points,2.2,-.28);}
+  for(const f of (data.coastlines||[]) as Feature[]){if(!f.points)continue;for(let i=0;i<f.points.length-1;i++){const a=f.points[i],b=f.points[i+1];if(beachContains((a[0]+b[0])/2,(a[1]+b[1])/2))continue;retaining.quad(new Vector3(a[0],-.5,a[1]),new Vector3(a[0],Math.max(.5,terrain(...a)),a[1]),new Vector3(b[0],Math.max(.5,terrain(...b)),b[1]),new Vector3(b[0],-.5,b[1]));}ribbon(tidal,f.points,2.2,-.28);}
   retaining.finish({kind:'coastline',source:'OSM coastline exact plan position; sea-wall elevation and material approximate'});tidal.finish({kind:'tidal-band',source:'Stylized narrow sea-wall foot; not surveyed beach geometry'});
 
   const grassMat=makeMat('Mapped park ground','#789760'),beachMat=makeMat('Mapped sand beaches','#dfcdaa');grassMat.zOffset=-1;beachMat.zOffset=-1;
@@ -99,7 +99,7 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
   const trunks=new Batch('Near park tree trunks',makeMat('Tree bark','#7b7562')),canopies=new Batch('Near park low polygon tree canopies',makeMat('Tree leaves','#ffffff'));
   const inside=(x:number,z:number,p:P[])=>{let yes=false;for(let i=0,j=p.length-1;i<p.length;j=i++){const a=p[i],b=p[j];if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])yes=!yes;}return yes;};
   let treeCount=0;
-  for(const area of (data.areas||[]) as Feature[]){if(!area.polygon||area.polygon.length<3)continue;const beach=area.type==='beach';flat(beach?beachGround:parkGround,area.polygon,sampleHeight?((x,z)=>terrain(x,z)+.08):LAND+.022,area.holes);
+  for(const area of (data.areas||[]) as Feature[]){if(excludedAreaIds.has(String(area.id))||!area.polygon||area.polygon.length<3)continue;const beach=area.type==='beach';flat(beach?beachGround:parkGround,area.polygon,sampleHeight?((x,z)=>terrain(x,z)+.08):LAND+.022,area.holes);
     if(beach||/广场/.test(area.name||''))continue;
     const xs=area.polygon.map(p=>p[0]),zs=area.polygon.map(p=>p[1]);let seed=String(area.id).split('').reduce((n,c)=>n+c.charCodeAt(0),1);const random=()=>{seed=(seed*1664525+1013904223)>>>0;return seed/4294967296;};
     for(let x=Math.max(-620,Math.min(...xs));x<Math.min(620,Math.max(...xs));x+=24)for(let z=Math.max(-620,Math.min(...zs));z<Math.min(620,Math.max(...zs));z+=24){const tx=x+(random()-.5)*12,tz=z+(random()-.5)*12;if(treeCount>=90||Math.hypot(tx,tz)>620||!inside(tx,tz,area.polygon))continue;const h=4.5+random()*2,r=2.6+random(),base=terrain(tx,tz);trunks.cylinder(new Vector3(tx,base+h/2,tz),.23,h,6);canopies.tint=Color3.FromHexString(['#477544','#5b8050','#70925c'][treeCount%3]);
@@ -184,5 +184,5 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
   // Freeze static transforms; all city geometry is grouped by shared material.
   for(const mesh of [...owned,...station.meshes,...pavilion.meshes])mesh.freezeWorldMatrix();
   const reflected=reflectionMeshes.filter(m=>m.isVisible&&(m.name.startsWith('Zhanqiao')||m.name.startsWith('Huilan')));
-  return {reflectionMeshes:reflected,collisionMeshes,pierStart,pavilionPosition,stationPosition:station.position,stats:{buildings:buildingCount,roads:(data.roads||[]).length},setDetail(distance:number){for(const item of details)item.mesh.setEnabled(distance<item.maxDistance);},dispose(){station.dispose();pavilion.dispose();for(const m of owned)m.dispose();for(const m of materials)m.dispose();for(const t of textures)t.dispose();}};
+  return {reflectionMeshes:reflected,collisionMeshes,pierStart,pavilionPosition,stationPosition:station.position,stats:{buildings:buildingCount,roads:(data.roads||[]).length},setNight(strength:number){for(const m of wallMats)m.emissiveColor=new Color3(1,.76,.42).scale(strength*.8);globeMat.emissiveColor=new Color3(1,.75,.35).scale(strength);},setDetail(distance:number){for(const item of details)item.mesh.setEnabled(distance<item.maxDistance);},dispose(){station.dispose();pavilion.dispose();for(const m of owned)m.dispose();for(const m of materials)m.dispose();for(const t of textures)t.dispose();}};
 }
