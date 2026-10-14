@@ -18,3 +18,5 @@
 ## 地标建筑参考
 
 回澜阁/栈桥/青岛站的报刊实景与建筑文字资料仅作模型参考，未将报刊或旅游网站照片作为运行贴图。模型几何及黄色瓦面、红瓦、窗格、钟盘、牌匾、石材等程序纹理为原创。参考链接及已知/估算尺寸见 public/data/LANDMARKS.md，详细方法见 docs/pavilion-references.md 和 docs/station-references.md。地理基底依然遵循 OSM / ODbL。
+
+胶州湾大桥、信号山、小鱼山、总督府/官邸、青啤博物馆、海大鱼山校区和大学路红墙的资料与照片也仅用作外观研究。派生地理数据见 heritage.json / bay-bridge.json，复原依据见 public/data/CITY-LANDMARKS.md 及 docs/。新增窗、瓦、石材、牌匾均采用原创程序纹理，研究照片不进入发布包。

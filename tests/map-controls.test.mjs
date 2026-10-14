@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {buildSync} from 'esbuild';
+import {mkdtempSync,writeFileSync,unlinkSync,rmdirSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+const dir=mkdtempSync(join(tmpdir(),'qingdao-controls-')),file=join(dir,'controls.mjs');
+const bundle=buildSync({stdin:{contents:`export {attachMapControls,intersectMapPlane,zoomRadius} from './src/map-controls.ts';export {NullEngine} from '@babylonjs/core/Engines/nullEngine';export {Scene,ArcRotateCamera,Vector3} from './src/babylon.ts';`,resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
+writeFileSync(file,bundle.outputFiles[0].contents);
+const {attachMapControls,intersectMapPlane,zoomRadius,NullEngine,Scene,ArcRotateCamera,Vector3}=await import(pathToFileURL(file));
+test('map-plane intersections reject sky and preserve horizontal geographic anchor',()=>{
+ assert.deepEqual(intersectMapPlane({x:3,y:100,z:4},{x:.2,y:-1,z:.3},0),{x:23,z:34});
+ assert.equal(intersectMapPlane({x:0,y:100,z:0},{x:0,y:1,z:0},0),null);
+ assert.ok(zoomRadius(500,-120,20,190000)<500);assert.equal(zoomRadius(20,-500,20,190000),20);assert.equal(zoomRadius(190000,500,20,190000),190000);
+});
+test('left drag pans without rotating; right drag reaches Babylon rotation; dragging back cannot pick',()=>{
+ const engine=new NullEngine({renderWidth:800,renderHeight:600}),scene=new Scene(engine),camera=new ArcRotateCamera('map',-Math.PI/2,.8,500,new Vector3(0,6,0),scene);scene.activeCamera=camera;
+ const listeners=new Map(),captures=new Set();
+ const canvas={clientHeight:600,getBoundingClientRect:()=>({left:0,top:0}),classList:{add(){},remove(){}},addEventListener(k,f){listeners.set(k,f);},removeEventListener(){},setPointerCapture(id){captures.add(id);},hasPointerCapture(id){return captures.has(id);},releasePointerCapture(id){captures.delete(id);}};
+ let picked=0,gestures=0;const controls=attachMapControls(canvas,scene,camera,{enabled:()=>true,onGestureStart:()=>gestures++,onPick:()=>picked++});
+ const event=(type,x,y,button=0)=>({type,clientX:x,clientY:y,pointerId:7,pointerType:'mouse',button,preventDefault(){},stopImmediatePropagation(){this.stopped=true;}});
+ const alpha=camera.alpha,beta=camera.beta,initial=camera.target.clone();
+ listeners.get('pointerdown')(event('pointerdown',400,300));listeners.get('pointermove')(event('pointermove',480,340));
+ assert.ok(Vector3.Distance(initial,camera.target)>10,'real camera pans under pointer');assert.equal(camera.alpha,alpha);assert.equal(camera.beta,beta);assert.equal(camera.target.y,6);
+ listeners.get('pointermove')(event('pointermove',400,300));listeners.get('pointerup')(event('pointerup',400,300));assert.equal(picked,0,'out-and-back drag never selects');
+ listeners.get('pointerdown')(event('pointerdown',400,300));listeners.get('pointerup')(event('pointerup',400,300));assert.equal(picked,1,'stationary left click selects');
+ const right=event('pointerdown',400,300,2);listeners.get('pointerdown')(right);assert.ok(!right.stopped,'right button remains native input');
+ camera.attachControl(false,false,0);const pointers=camera.inputs.attached.pointers;pointers.onButtonDown(right);pointers.onTouch(null,60,40);
+ assert.notEqual(camera.inertialAlphaOffset,0);assert.notEqual(camera.inertialBetaOffset,0);assert.equal(camera.inertialPanningX,0);assert.equal(camera.inertialPanningY,0);
+ listeners.get('pointerup')(event('pointerup',400,300,2));assert.equal(picked,1);assert.ok(gestures>=3);
+ controls.dispose();scene.dispose();engine.dispose();
+});
+process.on('exit',()=>{unlinkSync(file);rmdirSync(dir);});

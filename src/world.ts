@@ -8,7 +8,7 @@ type Feature = {id: string | number; name?: string; polygon?: P[]; holes?: P[][]
 const LAND = 2.4;
 
 /** Geographic coordinates are local ENU metres: Babylon X east, Z north. */
-export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sampleHeight?: (x:number,z:number)=>number) {
+export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sampleHeight?: (x:number,z:number)=>number, excludedBuildingIds=new Set<string>()) {
   const owned: AbstractMesh[] = [], materials: StandardMaterial[] = [], textures: Texture[] = [];
   const reflectionMeshes: AbstractMesh[] = [], collisionMeshes: AbstractMesh[] = [];
   const terrain=(x:number,z:number)=>{const h=sampleHeight?.(x,z);return typeof h==='number'&&Number.isFinite(h)?h:LAND;};
@@ -131,7 +131,7 @@ export function buildWorld(scene: Scene, data: any, shadows: ShadowGenerator, sa
   let buildingCount=0,colliderCount=0;
   for(const f of (data.buildings||[]) as Feature[]){if(!f.polygon||f.polygon.length<3)continue;const p=clean(f.polygon),h=f.height||12,k=hash(f.id),cx=p.reduce((s,q)=>s+q[0],0)/p.length,cz=p.reduce((s,q)=>s+q[1],0)/p.length;
     // Huilan Pavilion is modeled separately from its surveyed footprint.
-    if(/回澜|huilan/i.test(f.name||f.tags?.name||'')||station.excludedIds.has(String(f.id)))continue;
+    if(/回澜|huilan/i.test(f.name||f.tags?.name||'')||station.excludedIds.has(String(f.id))||excludedBuildingIds.has(String(f.id)))continue;
     // Keep a level roof above the highest sampled footprint point; foundation walls reach down into the slope.
     let base=terrain(cx,cz);if(sampleHeight){for(let i=0;i<p.length;i++){const a=p[i],b=p[(i+1)%p.length],steps=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/15));for(let j=0;j<=steps;j++)base=Math.max(base,terrain(a[0]+(b[0]-a[0])*j/steps,a[1]+(b[1]-a[1])*j/steps));}
       const minX=Math.min(...p.map(v=>v[0])),maxX=Math.max(...p.map(v=>v[0])),minZ=Math.min(...p.map(v=>v[1])),maxZ=Math.max(...p.map(v=>v[1]));for(let x=minX;x<=maxX;x+=Math.max(20,(maxX-minX)/8))for(let z=minZ;z<=maxZ;z+=Math.max(20,(maxZ-minZ)/8))if(inside(x,z,p))base=Math.max(base,terrain(x,z));}

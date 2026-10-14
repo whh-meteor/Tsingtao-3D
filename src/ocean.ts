@@ -37,8 +37,9 @@ void main(){
  vec2 ruv=(vWorld.xz-regionalShoreBounds.xy)/regionalShoreBounds.zw;float regionalDistance=texture2D(regionalShoreMap,vec2(ruv.x,1.-ruv.y)).r*shoreMaxDistance;float distanceToShore=mix(regionalDistance,shore.r*shoreMaxDistance,inBounds);
  vec3 view=normalize(eye-vWorld);float cameraDistance=length(eye-vWorld);
  float scale=mix(.22,.055,smoothstep(50.,1500.,cameraDistance));vec2 q=vWorld.xz*scale;
- float eps=.11;float r=ripples(q);vec2 micro=vec2(ripples(q+vec2(eps,0.))-r,ripples(q+vec2(0.,eps))-r)/eps;
- vec3 n=normalize(vNormal+vec3(-micro.x,0.,-micro.y)*(.075+.12*waveHeight)*(1.-smoothstep(600.,6000.,cameraDistance)));
+ float microFade=1.-smoothstep(400.,2200.,cameraDistance);vec2 micro=vec2(0.);
+ if(microFade>.02){float eps=.11;float r=ripples(q);micro=vec2(ripples(q+vec2(eps,0.))-r,ripples(q+vec2(0.,eps))-r)/eps;}
+ vec3 n=normalize(vNormal+vec3(-micro.x,0.,-micro.y)*(.075+.12*waveHeight)*microFade);
  float facing=max(dot(n,view),0.);float fresnel=.035+.965*pow(1.-facing,5.);
  float shallow=1.-smoothstep(0.,75.,distanceToShore);
  vec3 deep=vec3(.012,.20,.34);vec3 near=vec3(.045,.43,.46);
@@ -81,12 +82,13 @@ export function createOcean(scene: Scene, shore: {url?:string,bounds:{minX:numbe
   const b=shore.bounds;mat.setVector4('shoreBounds',new Vector4(b.minX,b.minZ,b.maxX-b.minX,b.maxZ-b.minZ));
   mat.setFloat('shoreMaxDistance',shore.maxDistance || 100);
   const ocean = MeshBuilder.CreateGround('bay-near',{width:6000,height:6000,subdivisions:220},scene);
-  ocean.material=mat;ocean.isPickable=false;ocean.alwaysSelectAsActiveMesh=true;
+  ocean.material=mat;ocean.isPickable=false;
   const far=MeshBuilder.CreateGround('bay-horizon',{width:400000,height:400000,subdivisions:48},scene);
   far.position.y=-1.15;far.material=mat;far.isPickable=false;far.alwaysSelectAsActiveMesh=true;
-  let waveHeight=.65,wind=1,foam=1;
-  return { mirror, setWaves(value:number){waveHeight=value;},setWind(value:number){wind=value;},setFoam(value:number){foam=value;},setQuality(high:boolean){mirror.refreshRate=high?2:4;},
+  let waveHeight=.65,wind=1,foam=1,qualityHigh=true;
+  return { mirror, setWaves(value:number){waveHeight=value;},setWind(value:number){wind=value;},setFoam(value:number){foam=value;},setQuality(high:boolean){qualityHigh=high;mirror.refreshRate=high?2:4;},
     update(time:number,sun:Vector3,sunColor:Color3,daylight:number,top:Color3,horizon:Color3){
+      const eye=scene.activeCamera!.globalPosition;mirror.refreshRate=Math.hypot(eye.x,eye.z)<9000?(qualityHigh?2:4):0;
       mat.setFloat('time',time);mat.setFloat('wind',wind);mat.setFloat('waveHeight',waveHeight);mat.setFloat('foamStrength',foam);mat.setFloat('daylight',daylight);
       mat.setVector3('eye',scene.activeCamera!.globalPosition);mat.setVector3('sunDirection',sun);mat.setColor3('sunColor',sunColor);mat.setColor3('skyTop',top);mat.setColor3('skyHorizon',horizon);mat.setMatrix('reflectionVP',reflectionVP);
     }};

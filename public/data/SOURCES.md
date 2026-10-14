@@ -65,3 +65,5 @@ python scripts/fetch-region.py
 ## 单独复原的地标
 
 2026-10-13更新：回澜阁、栈桥和青岛站使用建筑资料与实景参考独立复原。黄色琉璃瓦、24亭柱、151㎡占地及历史钟楼35m等已知值，与按照片估算的细部区别列于 [LANDMARKS.md](LANDMARKS.md)。真实OSM坐标和平面保留，不因文献栈桥440m而拉伸405.55m源多边形。青岛站 way/1465995439、way/1465995441、way/1465995440 的普通楼模型由地标模块替换。
+
+本版新增 heritage.json（历史建筑候选轮廓、真实公园与步道）、bay-bridge.json（真实分幅主线与匝道），来源为同一 Geofabrik OSM PBF。旧城网格更新为32米、浮山新增40米网格，均采样AWS Terrarium zoom12约31米源像素，不人为强制达到报道峰高。更小网格间距不代表测绘级精度。详见 CITY-LANDMARKS.md。

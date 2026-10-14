@@ -10,7 +10,7 @@ class Batch {
  finish(name:string,scene:Scene,material:StandardMaterial){if(!this.indices.length)return null;const m=new Mesh(name,scene),v=new VertexData();v.positions=this.p;v.indices=this.indices;v.colors=this.color;const normals:number[]=[];VertexData.ComputeNormals(this.p,this.indices,normals);v.normals=normals;v.applyToMesh(m);m.material=material;m.isPickable=false;m.freezeWorldMatrix();return m;}
 }
 const distance=(b:Bounds,x:number,z:number)=>Math.hypot(Math.max(b.minX-x,0,x-b.maxX),Math.max(b.minZ-z,0,z-b.maxZ));
-export async function createRegional(scene:Scene,region:Region,sample:(x:number,z:number)=>number,localBounds:Bounds){
+export async function createRegional(scene:Scene,region:Region,sample:(x:number,z:number)=>number,localBounds:Bounds,excludedBuildingIds=new Set<string>(),excludedRoadIds=new Set<string>()){
  const response=await fetch(region.chunksIndexFile);if(!response.ok)throw new Error('区域分块索引无法加载');const index=await response.json();
  const asphalt=new StandardMaterial('regional-road',scene);asphalt.diffuseColor=Color3.White();asphalt.specularColor=Color3.Black();asphalt.useLogarithmicDepth=true;asphalt.zOffset=-3;asphalt.zOffsetUnits=-3;
  const wall=new StandardMaterial('regional-wall',scene);wall.diffuseColor=Color3.White();wall.specularColor=Color3.Black();wall.useLogarithmicDepth=true;
@@ -23,13 +23,13 @@ export async function createRegional(scene:Scene,region:Region,sample:(x:number,
   }
  }}
  const roadsRes=await fetch(region.regionalRoadsFile);const roadsData=await roadsRes.json();const roads:Mesh[]=[];
- const roadGroups=new Map<string,Batch>();for(const r of roadsData.roads as Road[]){const p=r.points[Math.floor(r.points.length/2)];if(!p)continue;
+ const roadGroups=new Map<string,Batch>();for(const r of roadsData.roads as Road[]){if(excludedRoadIds.has(String(r.id)))continue;const p=r.points[Math.floor(r.points.length/2)];if(!p)continue;
   const key=`${Math.floor(p[0]/8000)}_${Math.floor(p[1]/8000)}`;let batch=roadGroups.get(key);if(!batch)roadGroups.set(key,batch=new Batch());road(batch,r);}
  for(const [key,b]of roadGroups){const m=b.finish('regional-road-'+key,scene,asphalt);if(m)roads.push(m);}
  const loaded=new Map<string,Mesh[]>(),pending=new Set<string>();let totalBuildings=0;let lastUpdate=-10;
  function insideLocal(x:number,z:number){return x>=localBounds.minX&&x<=localBounds.maxX&&z>=localBounds.minZ&&z<=localBounds.maxZ;}
  async function load(c:Chunk){pending.add(c.id);try{const res=await fetch(c.file);if(!res.ok)throw new Error(c.file);const data=await res.json();const walls=new Batch(),roofs=new Batch();
-  let processed=0;for(const b of data.buildings){if(processed++%150===149)await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));const poly=b.polygon as number[][];if(poly.length<3)continue;const cx=poly.reduce((s,p)=>s+p[0],0)/poly.length,cz=poly.reduce((s,p)=>s+p[1],0)/poly.length;if(insideLocal(cx,cz))continue;
+  let processed=0;for(const b of data.buildings){if(excludedBuildingIds.has(String(b.id)))continue;if(processed++%150===149)await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));const poly=b.polygon as number[][];if(poly.length<3)continue;const cx=poly.reduce((s,p)=>s+p[0],0)/poly.length,cz=poly.reduce((s,p)=>s+p[1],0)/poly.length;if(insideLocal(cx,cz))continue;
    const base=Math.max(...poly.map(p=>sample(p[0],p[1]))),height=b.height||9;const top=base+height;const hash=String(b.id).split('').reduce((s,c)=>s+c.charCodeAt(0),0);
    const wt=Color3.FromHexString(['#eadcc4','#e6e5d6','#d6e1d6'][hash%3]),rt=Color3.FromHexString(height<22?['#bd6449','#af5038','#c37a57'][hash%3]:'#929d98');
    for(let i=0;i<poly.length;i++){const a=poly[i],q=poly[(i+1)%poly.length];walls.quad([a[0],sample(a[0],a[1])-.3,a[1]],[a[0],top,a[1]],[q[0],top,q[1]],[q[0],sample(q[0],q[1])-.3,q[1]],wt);}

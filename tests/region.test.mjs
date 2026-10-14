@@ -26,3 +26,9 @@ test('roads follow the rendered triangle surface on saddle slopes',()=>{
  assert.equal(sampleGrid(g,a,50,50),60);
  assert.equal(sampleSurface(g,a,0,100),10);
 });
+
+test('Fushan has genuine finer relief and detailed patch edges align with regional cells',()=>{
+ for(const g of [region.detailTerrain,...region.landmarkTerrain]){const a=heights(g);assert.equal(a.length,g.width*g.height);assert.ok(a.every(Number.isFinite));for(const value of Object.values(g.bounds))assert.ok(value%400===0,'aligned edges avoid gaps where the coarse mesh is cut out');}
+ const g=region.landmarkTerrain[0],a=heights(g);assert.equal(g.spacingX,40);assert.ok(sampleGrid(g,a,10525.977,3239.23)>250,'mapped mountain retains actual DEM height');assert.ok(sampleGrid(g,a,10525.977,3239.23)>sampleGrid(g,a,8500,1700)+150,'genuine ridge rises above foot');
+ assert.equal(region.detailTerrain.spacingX,32);
+});

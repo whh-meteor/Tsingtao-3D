@@ -2,12 +2,15 @@ import { Scene, Mesh, VertexData, StandardMaterial, Color3, Texture } from './ba
 
 import { sampleGrid, sampleSurface, type Bounds, type HeightGrid } from './height';
 export type { Bounds, HeightGrid } from './height';
-export interface Region { bounds:Bounds; districts:{id:string;name:string;center:number[];polygons:{polygon:number[][];holes:number[][][]}[]}[];terrain:HeightGrid;detailTerrain:HeightGrid;regionalRoadsFile:string;chunksIndexFile:string;metadata:any }
+export interface Region { bounds:Bounds; districts:{id:string;name:string;center:number[];polygons:{polygon:number[][];holes:number[][][]}[]}[];terrain:HeightGrid;detailTerrain:HeightGrid;landmarkTerrain?:HeightGrid[];regionalRoadsFile:string;chunksIndexFile:string;metadata:any }
 function contains(b:Bounds,x:number,z:number){return x>=b.minX&&x<=b.maxX&&z>=b.minZ&&z<=b.maxZ;}
 export async function createTerrain(scene:Scene,region:Region,local:any){
- const [macro,detail]=await Promise.all([region.terrain,region.detailTerrain].map(async g=>{const res=await fetch(g.file);if(!res.ok)throw new Error('真实高程文件无法读取');return new Float32Array(await res.arrayBuffer());}));
- const raw=(x:number,z:number)=>contains(region.detailTerrain.bounds,x,z)?sampleGrid(region.detailTerrain,detail,x,z):sampleGrid(region.terrain,macro,x,z);
- const sample=(x:number,z:number)=>contains(region.detailTerrain.bounds,x,z)?sampleSurface(region.detailTerrain,detail,x,z):sampleSurface(region.terrain,macro,x,z);
+ const grids=[region.terrain,region.detailTerrain,...region.landmarkTerrain||[]];
+ const values=await Promise.all(grids.map(async g=>{const res=await fetch(g.file);if(!res.ok)throw new Error('真实高程文件无法读取');return new Float32Array(await res.arrayBuffer());}));
+ const [macro,detail]=values;
+ const gridIndex=(x:number,z:number)=>{for(let i=grids.length-1;i>0;i--)if(contains(grids[i].bounds,x,z))return i;return 0;};
+ const raw=(x:number,z:number)=>{const i=gridIndex(x,z);return sampleGrid(grids[i],values[i],x,z);};
+ const sample=(x:number,z:number)=>{const i=gridIndex(x,z);return sampleSurface(grids[i],values[i],x,z);};
  const material=new StandardMaterial('mountain-vegetation',scene);material.diffuseColor=Color3.White();material.specularColor=Color3.Black();material.useLogarithmicDepth=true;material.backFaceCulling=false;
  // A raster land mask cuts the genuine height mesh at the geographic coastline.
  // DEM water cells never become invented islands; the local OSM mask has precedence.
@@ -15,25 +18,26 @@ export async function createTerrain(scene:Scene,region:Region,local:any){
  if(mask){const texture=new Texture(mask.url,scene,false,false,Texture.BILINEAR_SAMPLINGMODE);texture.hasAlpha=true;material.diffuseTexture=texture;material.useAlphaFromDiffuseTexture=true;material.transparencyMode=1;material.alphaCutOff=.45;}
  const collisionMeshes:Mesh[]=[];
  const detailMaterial=material.clone('detailed-coastal-ground')!;
- if(region.metadata?.detailLandMask){const t=new Texture(region.metadata.detailLandMask.url,scene,false,false,Texture.BILINEAR_SAMPLINGMODE);t.hasAlpha=true;detailMaterial.diffuseTexture=t;detailMaterial.useAlphaFromDiffuseTexture=true;detailMaterial.transparencyMode=1;detailMaterial.alphaCutOff=.45;}
- function patch(grid:HeightGrid,values:Float32Array,step:number,name:string,skipDetail:boolean){
+ if(region.metadata?.detailLandMask){const t=new Texture(region.metadata.detailLandMask.url,scene,false,false,Texture.BILINEAR_SAMPLINGMODE);t.hasAlpha=true;t.wrapU=t.wrapV=Texture.CLAMP_ADDRESSMODE;detailMaterial.diffuseTexture=t;detailMaterial.useAlphaFromDiffuseTexture=true;detailMaterial.transparencyMode=1;detailMaterial.alphaCutOff=.45;}
+ function patch(grid:HeightGrid,values:Float32Array,step:number,name:string,skipDetail:boolean,localTexture=false){
   const p:number[]=[],idx:number[]=[],colors:number[]=[],uv:number[]=[];const b=grid.bounds;
   for(let r=0;r<grid.height;r+=step)for(let c=0;c<grid.width;c+=step){const x=b.minX+c*grid.spacingX,z=b.maxZ-r*grid.spacingZ,h=values[r*grid.width+c];p.push(x,Math.max(2.4,h),z);
    const n=Math.sin(x*.008)*Math.sin(z*.009)*.022;const rock=Math.max(0,Math.min(1,(h-450)/600));const green=Color3.Lerp(new Color3(.28+n,.43+n,.24+n),new Color3(.48,.50,.43),rock);colors.push(green.r,green.g,green.b,1);
-   const texBounds=skipDetail?region.bounds:region.detailTerrain.bounds;
+   const texBounds=localTexture?(region.metadata?.detailLandMask?.bounds||region.detailTerrain.bounds):region.bounds;
    uv.push((x-texBounds.minX)/(texBounds.maxX-texBounds.minX),(texBounds.maxZ-z)/(texBounds.maxZ-texBounds.minZ));
   }
   const w=Math.ceil(grid.width/step),h=Math.ceil(grid.height/step);
   for(let r=0;r<h-1;r++)for(let c=0;c<w-1;c++){const a=r*w+c;const x=p[a*3]+grid.spacingX*step/2,z=p[a*3+2]-grid.spacingZ*step/2;
-   if(skipDetail&&contains(region.detailTerrain.bounds,x,z))continue;
+   if(skipDetail&&grids.slice(1).some(g=>contains(g.bounds,x,z)))continue;
    // Without a mask, water samples are omitted rather than flattened into land.
    if(!mask&&raw(x,z)<=.3)continue;
    idx.push(a,a+w,a+1,a+1,a+w,a+w+1);
   }
-  const mesh=new Mesh(name,scene),v=new VertexData();v.positions=p;v.indices=idx;v.colors=colors;v.uvs=uv;const normals:number[]=[];VertexData.ComputeNormals(p,idx,normals);v.normals=normals;v.applyToMesh(mesh);mesh.material=skipDetail?material:detailMaterial;mesh.receiveShadows=true;mesh.isPickable=false;mesh.freezeWorldMatrix();return mesh;
+  const mesh=new Mesh(name,scene),v=new VertexData();v.positions=p;v.indices=idx;v.colors=colors;v.uvs=uv;const normals:number[]=[];VertexData.ComputeNormals(p,idx,normals);v.normals=normals;v.applyToMesh(mesh);mesh.material=localTexture?detailMaterial:material;mesh.receiveShadows=true;mesh.isPickable=false;mesh.freezeWorldMatrix();return mesh;
  }
  const regionalMesh=patch(region.terrain,macro,1,'real-regional-relief',true);
- const detailedMesh=patch(region.detailTerrain,detail,1,'real-zhanqiao-relief',false);
+ const detailedMesh=patch(region.detailTerrain,detail,1,'real-zhanqiao-relief',false,true);
+ const landmarkMeshes=grids.slice(2).map((g,i)=>patch(g,values[i+2],1,'real-landmark-relief-'+i,false));
  // Alpha-tested sea holes are visual only. Build a separate geographic land
  // collider so walking off the pier falls into water instead of an invisible floor.
  function pointInRing(x:number,z:number,ring:number[][]){let hit=false;for(let i=0,j=ring.length-1;i<ring.length;j=i++){const a=ring[i],b=ring[j];if((a[1]>z)!==(b[1]>z)&&x<(b[0]-a[0])*(z-a[1])/(b[1]-a[1])+a[0])hit=!hit;}return hit;}
@@ -44,5 +48,5 @@ export async function createTerrain(scene:Scene,region:Region,local:any){
   if(land)solid.push(...ids);
  }
  const collider=new Mesh('geographic-land-collision',scene);const cv=new VertexData();cv.positions=positions;cv.indices=solid;cv.applyToMesh(collider);collider.isVisible=false;collider.isPickable=false;collisionMeshes.push(collider);
- return {sample,raw,collisionMeshes,regionalMesh,detailedMesh,material,setLandMask(url:string){const texture=new Texture(url,scene,false,false,Texture.BILINEAR_SAMPLINGMODE);texture.hasAlpha=true;material.diffuseTexture=texture;material.useAlphaFromDiffuseTexture=true;material.transparencyMode=1;material.alphaCutOff=.45;}};
+ return {sample,raw,collisionMeshes,regionalMesh,detailedMesh,landmarkMeshes,material,setLandMask(url:string){const texture=new Texture(url,scene,false,false,Texture.BILINEAR_SAMPLINGMODE);texture.hasAlpha=true;material.diffuseTexture=texture;material.useAlphaFromDiffuseTexture=true;material.transparencyMode=1;material.alphaCutOff=.45;}};
 }
