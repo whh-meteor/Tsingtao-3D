@@ -17,7 +17,7 @@ void main(){vec2 cell=floor(vUV),f=fract(vUV);float window=step(.22,f.x)*step(f.
  vec3 warm=mix(vec3(1.,.66,.28),vec3(.76,.87,1.),step(.84,hash(cell+9.)));facade+=warm*(window*lit*.88+(1.-detail)*.07)*night;
  float coast=vCoast;
  float sweep=.35+.65*smoothstep(-.7,.7,sin(vWorld.y*.11-time*.22+vWorld.x*.0008));facade+=showColor(time+vWorld.x*.001)*(window+(1.-detail)*.12)*night*lightShow*coast*sweep*.9;
- float fog=1.-exp(-distance(vWorld,eye)*.000002);facade=mix(facade,horizon,fog*.12);gl_FragColor=vec4(facade,1.);
+ float fog=1.-exp(-distance(vWorld,eye)*.000002);facade=mix(facade,horizon,fog*.12);gl_FragColor=vec4(pow(max(facade,vec3(0.)),vec3(.454545)),1.);
 #include<logDepthFragment>
 }`;
 export function createCityMaterials(scene:Scene){

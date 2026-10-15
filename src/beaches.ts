@@ -84,6 +84,12 @@ export function buildBeaches(scene:Scene,data:BeachData,sampleHeight:(x:number,z
     for(let i=0;i<30000;i++){const x=random()*1024,y=random()*1024;c.fillStyle=random()>.5?'rgba(170,170,170,.18)':'rgba(90,90,90,.18)';c.fillRect(x,y,.6,.6);}
   });
   sand.bumpTexture.level=.11;
+  // StandardMaterial uploads 1 / bumpTexture.level: zero creates Infinity and
+  // black/undefined lighting. Use a separate flat far material, sharing albedo.
+  const distantSand=new StandardMaterial('Qingdao beaches stable distant sand',scene);
+  distantSand.diffuseTexture=sand.diffuseTexture;
+  distantSand.diffuseColor=sand.diffuseColor.clone();distantSand.specularColor=sand.specularColor.clone();
+  distantSand.specularPower=sand.specularPower;distantSand.useLogarithmicDepth=true;
   const records=beachRecords(data),excludedAreaIds=new Set<string>();
   let triangles=0;
   for(const r of records) {
@@ -133,5 +139,10 @@ export function buildBeaches(scene:Scene,data:BeachData,sampleHeight:(x:number,z
     mesh.metadata={kind:'shoreline-rocks',sourceIds:(data.rocks??[]).map(f=>f.id),estimatedDetail:'Individual boulder forms and exposure estimated inside mapped reef / bare-rock extents'};meshes.push(mesh);rockMeshes.push(mesh);
   }
   const views=data.beaches.filter(f=>f.name?.includes('第六')||f.name?.includes('第一')).map(f=>({id:'beach-'+f.id.split('/')[1],name:f.name!,position:new Vector3(f.position[0],sampleHeight(...f.position)+1,f.position[1]),radius:f.name?.includes('第六')?200:450,alpha:-2.1,beta:1.05}));
-  return {meshes,excludedAreaIds,views,stats:{beaches:records.length,triangles,rocks:rockCount},setDetail(distance:number){sand.bumpTexture!.level=distance>2200?0:distance>600?.04:.11;for(const m of rockMeshes)m.setEnabled(distance<1800);},dispose(){for(const m of meshes)m.dispose();sand.dispose();rock.dispose();for(const t of textures)t.dispose();}};
+  return {meshes,excludedAreaIds,views,stats:{beaches:records.length,triangles,rocks:rockCount},setDetail(distance:number){
+    sand.bumpTexture!.level=.001+.109*(1-smooth(600,2200,distance));
+    const material=distance>2200?distantSand:sand;
+    for(const m of meshes)if(m.metadata?.kind==='geographic-beach'&&m.material!==material)m.material=material;
+    for(const m of rockMeshes)m.setEnabled(distance<1800);
+  },dispose(){for(const m of meshes)m.dispose();sand.dispose();distantSand.dispose();rock.dispose();for(const t of textures)t.dispose();}};
 }

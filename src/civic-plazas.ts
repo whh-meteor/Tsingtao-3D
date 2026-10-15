@@ -18,7 +18,7 @@ export function buildCivicPlazas(scene:Scene,data:CivicData,shadows:ShadowGenera
   const excludedBuildingIds=new Set<string>(),excludedAreaIds=new Set<string>();
   const mat=(name:string,color:string,shine=.02)=>{const m=new StandardMaterial(name,scene);m.diffuseColor=Color3.FromHexString(color);m.specularColor.set(shine,shine,shine);m.useLogarithmicDepth=true;materials.push(m);return m;};
   const paving=mat('May Fourth and government plazas pale granite pavers','#ffffff'),trim=mat('Civic plazas dark radial granite inlays','#66716e'),grass=mat('Civic plazas mapped lawn beds','#759254'),hedge=mat('Civic plazas clipped hedges and trees','#ffffff'),trunk=mat('Civic plazas tree trunks','#887867'),steel=mat('May Wind red painted STEEL spiral','#cf2f20',.12),base=mat('May Wind dark polished stone plinth','#414e48',.07),water=mat('Civic mapped fountain water jets','#a9d2d6',.18),lamps=mat('Civic small warm ground luminaires','#ddd1b4',.05);
-  steel.specularPower=72;steel.backFaceCulling=false;steel.maxSimultaneousLights=5;
+  steel.specularPower=72;steel.backFaceCulling=false;steel.twoSidedLighting=true;steel.maxSimultaneousLights=5;steel.emissiveColor=Color3.Black();
   water.alpha=.62;
   const pavingTex=new DynamicTexture('Original diagonal granite brick pavement',{width:1024,height:1024},scene,true,Texture.TRILINEAR_SAMPLINGMODE),c=pavingTex.getContext()as CanvasRenderingContext2D;
   c.fillStyle='#c5c7bc';c.fillRect(0,0,1024,1024);
@@ -93,8 +93,11 @@ export function buildCivicPlazas(scene:Scene,data:CivicData,shadows:ShadowGenera
     const t=i/segments,angle=t*Math.PI*2*turns-.7,r=radius(t),end=Math.min(1,.35+t*9,.35+(1-t)*9),radial=section[k][0]*end,vertical=section[k][1]*end;
     return new Vector3(sx+(r+radial)*Math.cos(angle),sy+1.0+t*27.7+vertical,sz+(r+radial)*Math.sin(angle));
   };
-  for(let i=0;i<segments;i++)for(let k=0;k<section.length;k++)sculpture.quad(p(i,k),p(i+1,k),p(i+1,(k+1)%section.length),p(i,(k+1)%section.length));
-  for(const i of[0,segments]){const avg=section.reduce((v,_,k)=>v.add(p(i,k)),Vector3.Zero()).scale(1/section.length);for(let k=0;k<section.length;k++)sculpture.tri(avg,p(i,k),p(i,(k+1)%section.length));}
+  // The section runs counterclockwise in radial/up coordinates. Advance around
+  // the section before advancing along the helix so the closed shell normals
+  // face OUT, including the broad upper steel face that receives midday sun.
+  for(let i=0;i<segments;i++)for(let k=0;k<section.length;k++)sculpture.quad(p(i,k),p(i,(k+1)%section.length),p(i+1,(k+1)%section.length),p(i+1,k));
+  for(const i of[0,segments]){const avg=section.reduce((v,_,k)=>v.add(p(i,k)),Vector3.Zero()).scale(1/section.length);for(let k=0;k<section.length;k++)if(i===0)sculpture.tri(avg,p(i,(k+1)%section.length),p(i,k));else sculpture.tri(avg,p(i,k),p(i,(k+1)%section.length));}
   // The visible central wind curls upward and leans at its tip; it is a swept steel
   // blade rather than a red ball or cone filling the spaces between the ribbons.
   const core=(j:number,side:number)=>{const t=j/110,a=t*5.6+.3,w=(1-t)*1.9+.15,offset=Math.sin(t*Math.PI)*2.1;return new Vector3(sx+offset*Math.cos(a)+Math.cos(a+side*Math.PI)*w,sy+.75+t*29.25,sz+offset*Math.sin(a)+Math.sin(a+side*Math.PI)*w);};

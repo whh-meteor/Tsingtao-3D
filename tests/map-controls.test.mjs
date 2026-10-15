@@ -6,9 +6,9 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 const dir=mkdtempSync(join(tmpdir(),'qingdao-controls-')),file=join(dir,'controls.mjs');
-const bundle=buildSync({stdin:{contents:`export {attachMapControls,intersectMapPlane,zoomRadius} from './src/map-controls.ts';export {NullEngine} from '@babylonjs/core/Engines/nullEngine';export {Scene,ArcRotateCamera,Vector3} from './src/babylon.ts';`,resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
+const bundle=buildSync({stdin:{contents:`export {attachMapControls,intersectMapPlane,zoomRadius} from './src/map-controls.ts';export {NullEngine} from '@babylonjs/core/Engines/nullEngine';export {Scene,ArcRotateCamera,Vector3,Matrix} from './src/babylon.ts';`,resolveDir:process.cwd()},bundle:true,platform:'node',format:'esm',write:false});
 writeFileSync(file,bundle.outputFiles[0].contents);
-const {attachMapControls,intersectMapPlane,zoomRadius,NullEngine,Scene,ArcRotateCamera,Vector3}=await import(pathToFileURL(file));
+const {attachMapControls,intersectMapPlane,zoomRadius,NullEngine,Scene,ArcRotateCamera,Vector3,Matrix}=await import(pathToFileURL(file));
 test('map-plane intersections reject sky and preserve horizontal geographic anchor',()=>{
  assert.deepEqual(intersectMapPlane({x:3,y:100,z:4},{x:.2,y:-1,z:.3},0),{x:23,z:34});
  assert.equal(intersectMapPlane({x:0,y:100,z:0},{x:0,y:1,z:0},0),null);
@@ -30,5 +30,12 @@ test('left drag pans without rotating; right drag reaches Babylon rotation; drag
  assert.notEqual(camera.inertialAlphaOffset,0);assert.notEqual(camera.inertialBetaOffset,0);assert.equal(camera.inertialPanningX,0);assert.equal(camera.inertialPanningY,0);
  listeners.get('pointerup')(event('pointerup',400,300,2));assert.equal(picked,1);assert.ok(gestures>=3);
  controls.dispose();scene.dispose();engine.dispose();
+});
+test('rapid wheel events preserve one geographic anchor throughout smooth zoom',()=>{
+ const engine=new NullEngine({renderWidth:800,renderHeight:600}),scene=new Scene(engine),camera=new ArcRotateCamera('map',-1.9,1.1,500,new Vector3(0,6,0),scene);scene.activeCamera=camera;
+ const listeners=new Map(),canvas={clientHeight:600,getBoundingClientRect:()=>({left:0,top:0}),classList:{add(){},remove(){}},addEventListener(k,f){listeners.set(k,f);},removeEventListener(){}};
+ const controls=attachMapControls(canvas,scene,camera,{enabled:()=>true,onGestureStart(){},onPick(){}}),point=()=>{camera.getViewMatrix(true);const r=scene.createPickingRay(525,345,Matrix.Identity(),camera);return intersectMapPlane(r.origin,r.direction,6);},anchor=point();
+ for(let i=0;i<6;i++){listeners.get('wheel')({clientX:525,clientY:345,deltaY:-50,deltaMode:0,preventDefault(){},stopImmediatePropagation(){}});controls.update(1/60);}
+ for(let i=0;i<180;i++)controls.update(1/60);const end=point();assert.ok(camera.radius<300);assert.ok(Math.hypot(end.x-anchor.x,end.z-anchor.z)<.02);assert.equal(camera.alpha,-1.9);assert.equal(camera.beta,1.1);controls.dispose();scene.dispose();engine.dispose();
 });
 process.on('exit',()=>{unlinkSync(file);rmdirSync(dir);});
