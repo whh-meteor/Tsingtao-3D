@@ -34,6 +34,25 @@ Zotero/inject连接错误、`Resend failed ... uniqueContextId not found` 不来
 
 分块提升中断恢复能力，不能保证任意网络下的首屏速度；三维引擎JS和材质图片仍需通过原链路下载。若部署后所有静态资源依然很慢，需对比另一条网络以及Cloudflare边缘/域名链路，不能通过增大前端超时彻底解决。
 
-更新后需提交并推送代码，再由Cloudflare构建发布。v0.4.3的加载详情会显示版本号，HTML入口改为约1.85KB的轻量启动脚本并异步加载主程序。不能只重试旧提交就期望启动逻辑改变。本机Wrangler未认证，未代替用户发布到线上。
+更新后需提交并推送代码，再由Cloudflare构建发布。v0.4.3的加载详情会显示版本号，HTML入口文件约1.85KB；后续v0.4.4检查发现它并未真正独立于大包，原因和修复见下节。不能只重试旧提交就期望启动逻辑改变。本机Wrangler未认证，未代替用户发布到线上。
 
 缓存头格式依据[Cloudflare Workers Static Assets Headers](https://developers.cloudflare.com/workers/static-assets/headers/)；所有分块由现有`npm run build`自动生成，不需要在Cloudflare另行安装Python或解压插件。
+
+## v0.4.4：入口文件小，但静态依赖仍然很大
+
+用户截图显示v0.4.3停留在HTML初始文案“正在下载启动程序”，日志没有bootstrap.ts写入的“正在加载三维引擎与场景程序”，因此不能继续归因于scene.json；此时资源加载代码根本没有执行。
+
+检查实际生产包发现：index-DD27rqqQ.js开头静态导入babylon-Cluqx-_n.js中的Vite preload helper。Rollup原先的manualChunks函数只显式选择Babylon模块，但默认行为也把这些模块的依赖合入手工chunk，包括共享的预加载辅助代码。于是入口必须等待约1.83MB的引擎包下载、解析与执行，之后才有机会更新页面。这是上一轮未覆盖的构建依赖问题；只检查入口文件大小或模拟JSON失败都无法发现它。
+
+修复与设计边界：
+
+- 设置output.onlyExplicitManualChunks=true，只把明确选择的Babylon模块合入引擎包。加载辅助代码从引擎包分离，HTML不再提前modulepreload整个Babylon。
+- 共享预加载辅助函数进一步独立为约1.11KB的loader-runtime，入口本身约2.38KB，合计约3.49KB；引擎只依赖这个稳定辅助包，避免启动页文案修改通过反向依赖连带更换整个引擎包的缓存URL。
+- 新增scripts/startup-graph.mjs构建守卫，遍历生产入口的所有传递静态依赖，禁止其中出现Babylon模块，并限制总量24 KiB；三维引擎保留为动态依赖。3项回归测试分别覆盖“入口很小但辅助模块间接指向引擎”、允许动态依赖、传递依赖预算。
+- 启动程序先报告“已就绪”，随后加载三维程序；原生模块请求长时间无响应时显示网络慢的说明和重试入口，失败保留具体路径。原有大数据分块、后台物理与区域补载继续保留。
+- 网站图标从加载页及页面品牌区移除，恢复QD文字；补充真正的favicon.ico，6种分辨率，仅通过HTML head图标链接使用。SVG/PNG仅作浏览器和触屏书签的兼容格式。
+- 对带内容哈希的/assets/*配置不可变缓存，减少重复访问下载；HTML不配置永久缓存。
+
+本轮修复保证加载器可以先运行，不等于消除网络中断。引擎主体仍约1.83MB（gzip约430KB）；首次访问下载它是进入三维画面的必要成本。如果该资源通过当前线路仍反复中断，应对比访问网络或选择更靠近实际访客的静态托管/CDN，继续增大前端超时并不能修复传输链路。
+
+验证：38项测试、生产构建及Wrangler部署预检通过。生产入口为index-DUTc3QW5.js，只静态依赖loader-runtime-BXl3LOEh.js；HTML不再预加载Babylon。浏览器模拟Babylon返回503时，启动日志先显示“启动程序已就绪”，然后显示中文下载失败和资源路径；恢复资源并点击重新加载后进入主场景，后台5/5完成、Havok启用。页面body没有favicon图片，品牌为QD；favicon.ico包含6种尺寸。本轮仍为本地修复，需经用户现有Cloudflare构建流程发布。

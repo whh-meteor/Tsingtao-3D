@@ -8,7 +8,8 @@ export function downloadStatus(label:string,progress:Progress){
  const status=document.getElementById('load-status');if(status)status.textContent=`正在下载${label} · ${size}${total}${progress.parts?` · ${progress.completed}/${progress.parts} 块`:''}`;
 }
 export function startupFailure(error:unknown){
- console.error(error);startupStatus(error instanceof Error?error.message:String(error));
+ console.error(error);const message=error instanceof Error?error.message:String(error);startupStatus(message);
+ if(/dynamically imported module|module script|preload CSS/i.test(message)){const status=document.getElementById('load-status');if(status)status.textContent='三维程序资源下载失败，请点击重新加载；具体路径见加载详情。';}
  document.querySelector('#boot-root .spinner')?.remove();const retry=document.getElementById('boot-retry');if(retry)retry.hidden=false;
  const details=document.querySelector<HTMLDetailsElement>('#boot-root details');if(details)details.open=true;
 }
