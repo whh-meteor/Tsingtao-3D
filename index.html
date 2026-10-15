@@ -1,2 +1,24 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><meta name="theme-color" content="#092a32"><meta name="description" content="真实 OSM 地理比例与 DEM 高程的青岛八区浏览器探索 Demo，包含栈桥、青岛湾海面和山地。"><title>青岛 · 山海之城 | 八区三维探索</title></head><body><canvas id="scene" aria-label="青岛栈桥三维场景"></canvas><div id="app"></div><script type="module" src="/src/main.ts"></script></body></html>
+<html lang="zh-CN">
+<head>
+ <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+ <meta name="theme-color" content="#092a32"><meta name="description" content="真实 OSM 地理比例与 DEM 高程的青岛八区浏览器探索 Demo，包含栈桥、青岛湾海面和山地。">
+ <link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="icon" sizes="32x32" href="/favicon-32.png"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
+ <title>青岛 · 山海之城 | 八区三维探索</title>
+ <style>
+ html,body{margin:0;background:#0d3038;color:#e7efdf;font-family:system-ui,"Microsoft YaHei",sans-serif}#scene{position:absolute;width:100%;height:100%}#boot-root{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#0d3038;transition:opacity .5s}#boot-root img{width:72px;height:72px}#boot-root h2{font-weight:400;letter-spacing:7px;margin:10px 0}#boot-root p{font-size:12px;color:#b3c6c0;max-width:86vw;line-height:1.8;text-align:center;overflow-wrap:anywhere}#boot-root details{width:min(480px,84vw);font-size:11px;color:#a8c1bb;line-height:1.8}#boot-root summary{cursor:pointer;text-align:center}#load-log{max-height:160px;overflow:auto;padding-left:24px;overflow-wrap:anywhere}#boot-retry{background:#d2e7a1;color:#183b35;border:0;border-radius:7px;padding:10px 20px;cursor:pointer}#boot-root [hidden]{display:none}#boot-root .spinner{width:150px;height:2px;background:#ffffff20;overflow:hidden}#boot-root .spinner:after{content:'';display:block;height:2px;width:60px;background:#d2e7a1;animation:boot-wave 1.5s infinite}@keyframes boot-wave{from{transform:translateX(-60px)}to{transform:translateX(160px)}}
+ </style>
+</head>
+<body>
+ <canvas id="scene" aria-label="青岛栈桥三维场景"></canvas><div id="app"></div>
+ <section id="boot-root" aria-label="场景加载状态"><img src="/favicon.svg" alt="栈桥回澜阁图标"><div>QINGDAO BAY</div><h2>风从海上来</h2><div class="spinner"></div><p id="load-status" role="status">正在下载启动程序</p><details><summary>加载详情 · v0.4.3</summary><ol id="load-log"><li>页面已连接，等待启动程序</li></ol></details><button id="boot-retry" hidden>重新加载</button><noscript>请启用 JavaScript 后重新加载。</noscript></section>
+ <script>
+ (()=>{
+  const status=document.getElementById('load-status'),log=document.getElementById('load-log'),retry=document.getElementById('boot-retry');
+  retry.onclick=()=>location.reload();
+  window.addEventListener('error',event=>{const target=event.target;if(target instanceof HTMLScriptElement){status.textContent='启动脚本下载失败：'+target.src;const line=document.createElement('li');line.textContent=status.textContent;log.append(line);retry.hidden=false;}},true);
+  setTimeout(()=>{if(document.getElementById('boot-root')){retry.hidden=false;const line=document.createElement('li');line.textContent='启动超过20秒，请展开详情查看当前阶段；可重试已中断的下载。';log.append(line);}},20000);
+ })();
+ </script>
+ <script type="module" src="/src/bootstrap.ts"></script>
+</body></html>

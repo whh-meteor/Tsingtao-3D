@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
+import {assetChunksPlugin} from './scripts/asset-chunks.mjs';
 export default defineConfig({
-  plugins: [],
+  plugins: [assetChunksPlugin()],
   build: {
     rollupOptions: {
       output: {
