@@ -1,12 +1,13 @@
 import { Scene, Mesh, VertexData, StandardMaterial, Color3, Texture } from './babylon';
 
+import {fetchBuffer} from './asset-loader';
 import { sampleGrid, sampleSurface, type Bounds, type HeightGrid } from './height';
 export type { Bounds, HeightGrid } from './height';
 export interface Region { bounds:Bounds; districts:{id:string;name:string;center:number[];polygons:{polygon:number[][];holes:number[][][]}[]}[];terrain:HeightGrid;detailTerrain:HeightGrid;landmarkTerrain?:HeightGrid[];regionalRoadsFile:string;chunksIndexFile:string;metadata:any }
 function contains(b:Bounds,x:number,z:number){return x>=b.minX&&x<=b.maxX&&z>=b.minZ&&z<=b.maxZ;}
 export async function createTerrain(scene:Scene,region:Region,local:any,surfaceFactory?:(raw:(x:number,z:number)=>number)=>((x:number,z:number)=>number|null),coastalBounds:Bounds[]=[],beachMask?:{url:string;bounds:Bounds},beachContains:(x:number,z:number)=>boolean=()=>false){
  const grids=[region.terrain,region.detailTerrain,...region.landmarkTerrain||[]];
- const values=await Promise.all(grids.map(async g=>{const res=await fetch(g.file);if(!res.ok)throw new Error('真实高程文件无法读取');return new Float32Array(await res.arrayBuffer());}));
+ const values=await Promise.all(grids.map(async g=>{const buffer=await fetchBuffer(g.file);if(buffer.byteLength!==g.width*g.height*4)throw new Error('高程文件不完整：'+g.file);return new Float32Array(buffer);}));
  const original=values.map(a=>a.slice());const [macro,detail]=values;
  // Blend only the boundary collar to its actual coarse parent. This removes
  // gaps and changing road elevations at resolution joins without exaggeration.

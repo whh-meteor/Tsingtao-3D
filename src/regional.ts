@@ -1,5 +1,6 @@
 import { Scene, Mesh, VertexData, StandardMaterial, Color3, Vector3 } from './babylon';
 import earcut from 'earcut';
+import {fetchJSON} from './asset-loader';
 import type { Region, Bounds } from './terrain';
 import {createCityMaterials} from './city-lighting';
 import type { Material } from '@babylonjs/core/Materials/material';
@@ -13,7 +14,7 @@ class Batch {
 }
 const distance=(b:Bounds,x:number,z:number)=>Math.hypot(Math.max(b.minX-x,0,x-b.maxX),Math.max(b.minZ-z,0,z-b.maxZ));
 export async function createRegional(scene:Scene,region:Region,sample:(x:number,z:number)=>number,localBounds:Bounds,excludedBuildingIds=new Set<string>(),excludedRoadIds=new Set<string>(),coastalIds=new Set<string>()){
- const response=await fetch(region.chunksIndexFile);if(!response.ok)throw new Error('区域分块索引无法加载');const index=await response.json();
+ const [index,roadsData]=await Promise.all([fetchJSON(region.chunksIndexFile,{timeoutMs:120000}),fetchJSON(region.regionalRoadsFile,{timeoutMs:120000})]);
  const asphalt=new StandardMaterial('regional-road',scene);asphalt.diffuseColor=Color3.White();asphalt.specularColor=Color3.Black();asphalt.useLogarithmicDepth=true;asphalt.zOffset=-3;asphalt.zOffsetUnits=-3;
  const cityMaterials=createCityMaterials(scene),wall=cityMaterials.wall,roof=cityMaterials.roof;
  function road(batch:Batch,r:Road){const color=Color3.FromHexString('#667271');let half=Math.max(2,r.width/2);for(let i=1;i<r.points.length;i++){const a=r.points[i-1],b=r.points[i],len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len<.2)continue;
@@ -24,14 +25,14 @@ export async function createRegional(scene:Scene,region:Region,sample:(x:number,
    batch.quad([p[0]-nx,y,p[1]-nz],[p[0]+nx,y,p[1]+nz],[q[0]+nx,y2,q[1]+nz],[q[0]-nx,y2,q[1]-nz],color);
   }
  }}
- const roadsRes=await fetch(region.regionalRoadsFile);const roadsData=await roadsRes.json();const roads:Mesh[]=[];
+ const roads:Mesh[]=[];
  const roadGroups=new Map<string,Batch>();for(const r of roadsData.roads as Road[]){if(excludedRoadIds.has(String(r.id)))continue;const p=r.points[Math.floor(r.points.length/2)];if(!p)continue;
   const key=`${Math.floor(p[0]/8000)}_${Math.floor(p[1]/8000)}`;let batch=roadGroups.get(key);if(!batch)roadGroups.set(key,batch=new Batch());road(batch,r);}
  for(const [key,b]of roadGroups){const m=b.finish('regional-road-'+key,scene,asphalt);if(m)roads.push(m);}
  const groupKey=(c:Chunk)=>Math.floor(c.bounds.minX/8000)+'_'+Math.floor(c.bounds.minZ/8000);const groupChunks=new Map<string,Chunk[]>();for(const c of index.chunks as Chunk[]){if(!c.buildingCount)continue;const k=groupKey(c);if(!groupChunks.has(k))groupChunks.set(k,[]);groupChunks.get(k)!.push(c);}let detailLOD=true;const displayedGroups=new Set<string>();
  const loaded=new Map<string,Mesh[]>(),pending=new Set<string>();let totalBuildings=0;let lastUpdate=-10;
  function insideLocal(x:number,z:number){return x>=localBounds.minX&&x<=localBounds.maxX&&z>=localBounds.minZ&&z<=localBounds.maxZ;}
- async function load(c:Chunk){pending.add(c.id);try{const res=await fetch(c.file);if(!res.ok)throw new Error(c.file);const data=await res.json();const walls=new Batch(),roofs=new Batch();
+ async function load(c:Chunk){pending.add(c.id);try{const data=await fetchJSON(c.file,{attempts:2,timeoutMs:30000});const walls=new Batch(),roofs=new Batch();
   let processed=0;for(const b of data.buildings){if(excludedBuildingIds.has(String(b.id)))continue;if(processed++%150===149)await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));const poly=b.polygon as number[][];if(poly.length<3)continue;const cx=poly.reduce((s,p)=>s+p[0],0)/poly.length,cz=poly.reduce((s,p)=>s+p[1],0)/poly.length;if(insideLocal(cx,cz))continue;
    walls.coast=coastalIds.has(String(b.id))?1:0;const base=Math.max(...poly.map(p=>sample(p[0],p[1]))),height=b.height||9;const top=base+height;const hash=String(b.id).split('').reduce((s,c)=>s+c.charCodeAt(0),0);
    const wt=Color3.FromHexString(['#eadcc4','#e6e5d6','#d6e1d6'][hash%3]),rt=Color3.FromHexString(height<22?['#bd6449','#af5038','#c37a57'][hash%3]:'#929d98');

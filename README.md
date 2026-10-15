@@ -35,6 +35,8 @@ npm run build 执行 TypeScript 检查并构建，npm run preview 预览生产�
 
 如果日志再次出现自动安装 `@cloudflare/vite-plugin` 或 `Cannot modify Vite config`，说明部署所在提交/根目录没有读到这份 `wrangler.jsonc`；检查推送的提交和 Cloudflare 根目录。不要只重跑尚未包含配置的旧提交。参考 [Cloudflare 静态资源配置](https://developers.cloudflare.com/workers/static-assets/binding/)。
 
+线上遇到长期加载、200响应后连接关闭、扩展重发提示时，见 [加载故障分析与恢复机制](docs/deployment-loading.md)。远景建筑、区域道路/海岸与地铁在近景启动后后台补载，失败可单独重试。
+
 ## 已实现
 
 - v0.4：著名地物浮动标签，点击导航；控制面板可显示/隐藏标签、收起面板，顶部“光与海”可重新展开。
@@ -100,6 +102,6 @@ Python需requests、numpy、Pillow、shapely、pyproj、scipy、osmium，OSM依�
 
 ## 验证与许可
 
-27项测试覆盖左右键交互、连续滚轮锚点、拖动后防误点击、远景替换连续性、沙滩坡面与远景材质、博物馆地坪、阴影像素对齐、电视塔与雕塑尺寸/重复模型排除/外法线、地铁数据、三种航道桥、地标位置、八区数据、高程、UTC+8太阳与角色重力。浏览器检查昼夜、地标、山地、地铁光效及标签和面板开关。FPS依赖设备及硬件加速，界面实时显示。
+32项测试覆盖左右键交互、连续滚轮锚点、拖动后防误点击、远景替换连续性、沙滩坡面与远景材质、博物馆地坪、阴影像素对齐、电视塔与雕塑尺寸/重复模型排除/外法线、地铁数据、三种航道桥、地标位置、八区数据、高程、UTC+8太阳与角色重力。浏览器检查昼夜、地标、山地、地铁光效及标签和面板开关。FPS依赖设备及硬件加速，界面实时显示。
 
 地图数据 © OpenStreetMap contributors，ODbL1.0。DEM为AWS/Mapzen Terrain Tiles，上游归属见来源文档。依赖和海面参考见THIRD_PARTY.md。静态包包含运行资源，无地图API密钥。
