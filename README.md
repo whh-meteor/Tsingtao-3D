@@ -19,6 +19,22 @@ npm run dev
 
 npm run build 执行 TypeScript 检查并构建，npm run preview 预览生产包，npm test 检查地理、高程、太阳与角色重力。
 
+## Cloudflare Workers 部署
+
+项目通过 `wrangler.jsonc` 将 `dist` 部署为 Workers Static Assets。这是浏览器端静态场景，不需要服务端入口或 `@cloudflare/vite-plugin`。提交 `wrangler.jsonc`、`package.json` 和 `package-lock.json` 后，Cloudflare Workers Builds 使用：
+
+| 设置 | 值 |
+| --- | --- |
+| 根目录 | `zhanqiao-demo` 的仓库相对路径；若仓库本身就是该目录，留空或填 `/` |
+| 构建命令 | `npm run build` |
+| 部署命令 | `npx wrangler deploy` |
+| Worker 名称 | `tsingtao-3d`，与配置和控制台项目保持一致 |
+| Node.js | `24`，或其他满足依赖要求的版本 |
+
+本地首次安装执行 `npm ci`，再执行 `npm run build` 和 `npm run deploy:check`。后者只检查和打包，不上传或发布。实际从本地部署使用 `npm run deploy`，需先登录正确的 Cloudflare 账户。
+
+如果日志再次出现自动安装 `@cloudflare/vite-plugin` 或 `Cannot modify Vite config`，说明部署所在提交/根目录没有读到这份 `wrangler.jsonc`；检查推送的提交和 Cloudflare 根目录。不要只重跑尚未包含配置的旧提交。参考 [Cloudflare 静态资源配置](https://developers.cloudflare.com/workers/static-assets/binding/)。
+
 ## 已实现
 
 - v0.4：著名地物浮动标签，点击导航；控制面板可显示/隐藏标签、收起面板，顶部“光与海”可重新展开。
