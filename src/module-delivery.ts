@@ -31,7 +31,9 @@ export async function prepareModuleDelivery(){
      container.addEventListener('controllerchange',done);registration.addEventListener('updatefound',done);done();
     });
    })(),
-   new Promise<never>((_,reject)=>{timer=setTimeout(()=>{expired=true;reject(new Error('程序分块下载器连接超时'));},20000);})
+   // A cold CDN request for this small script can itself exceed 20 seconds.
+   // Keep waiting for control rather than prematurely requesting the large modules.
+   new Promise<never>((_,reject)=>{timer=setTimeout(()=>{expired=true;reject(new Error('程序分块下载器连接超时'));},60000);})
   ]);
   document.documentElement.dataset.programDelivery='chunks';startupStatus('三维程序分块下载已就绪');return true;
  }catch(error){container.removeEventListener('message',receive);document.documentElement.dataset.programDelivery='native';startupStatus(`${error instanceof Error?error.message:String(error)}，正在尝试标准加载`);return false;}

@@ -192,6 +192,6 @@ async function start(){
  window.addEventListener('resize',()=>engine.resize());
  $('boot-root').style.opacity='0';setTimeout(()=>$('boot-root')?.remove(),700);
  setTimeout(()=>void background.run(),0);
- (window as any).__demo={scene,engine,world,parks,heritage,bridge,get character(){return character;},setMode,solar:()=>solar,data,updateSun,terrain,get regional(){return regional;},region,beaches,civic,plazas,get overview(){return overview;},get metro(){return metro;},version:'0.4.5'};
+ (window as any).__demo={scene,engine,world,parks,heritage,bridge,get character(){return character;},setMode,solar:()=>solar,data,updateSun,terrain,get regional(){return regional;},region,beaches,civic,plazas,get overview(){return overview;},get metro(){return metro;},version:'0.4.6'};
 }
 start().catch(startupFailure);
