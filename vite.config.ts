@@ -2,9 +2,11 @@ import { defineConfig } from 'vite';
 import {assetChunksPlugin} from './scripts/asset-chunks.mjs';
 import {startupGraphGuard} from './scripts/startup-graph.mjs';
 import {moduleDeliveryPlugin} from './scripts/module-delivery.mjs';
+import {quickScenePlugin} from './scripts/quick-scene.mjs';
 export default defineConfig({
-  plugins: [assetChunksPlugin(),startupGraphGuard(),moduleDeliveryPlugin()],
+  plugins: [assetChunksPlugin(),startupGraphGuard(),moduleDeliveryPlugin(),quickScenePlugin()],
   build: {
+    cssCodeSplit: false,
     rollupOptions: {
       output: {
         // Do not pull Vite's shared preload helper into the engine vendor chunk.

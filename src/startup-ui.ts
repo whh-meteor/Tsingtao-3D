@@ -10,6 +10,6 @@ export function downloadStatus(label:string,progress:Progress){
 export function startupFailure(error:unknown){
  console.error(error);const message=error instanceof Error?error.message:String(error);startupStatus(message);
  if(/dynamically imported module|module script|preload CSS/i.test(message)){const status=document.getElementById('load-status');if(status)status.textContent='三维程序资源下载失败，请点击重新加载；具体路径见加载详情。';}
- document.querySelector('#boot-root .spinner')?.remove();const retry=document.getElementById('boot-retry');if(retry)retry.hidden=false;
+ document.querySelector('#boot-root .spinner')?.remove();const retry=document.getElementById('boot-retry');if(retry){retry.hidden=false;retry.textContent='重新载入完整程序';retry.onclick=()=>location.reload();}
  const details=document.querySelector<HTMLDetailsElement>('#boot-root details');if(details)details.open=true;
 }

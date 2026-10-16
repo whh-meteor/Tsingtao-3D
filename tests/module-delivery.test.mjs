@@ -20,7 +20,7 @@ function bootWorker(manifest,fetch,caches=persistentCaches()){
  const handlers=new Map(),messages=[];
  const code=buildSync({entryPoints:['worker/module-worker.ts'],bundle:true,write:false,platform:'browser',format:'iife',target:'es2022',define:{__MODULE_MANIFEST__:JSON.stringify(manifest)}}).outputFiles[0].text;
  runInNewContext(code,{fetch,caches,crypto:webcrypto,Response,Request,Headers,URL,Blob,TextDecoder,DecompressionStream,AbortController,setTimeout,clearTimeout,console,location:{origin:'https://qingdao.test'},clients:{async get(){return{postMessage:data=>messages.push(data)};},async claim(){}},async skipWaiting(){},addEventListener:(type,handler)=>handlers.set(type,handler)});
- return{messages,request(path,method='GET'){let answer;handlers.get('fetch')({request:new Request('https://qingdao.test'+path,{method}),clientId:'qa',respondWith:promise=>{answer=promise;}});return answer;}};
+ return{messages,async prepare(){let pending;handlers.get('message')({data:{channel:'qingdao-program',type:'prepare',request:'test-request'},source:{id:'qa',postMessage:data=>messages.push(data)},waitUntil:promise=>{pending=promise;}});await pending;return messages.filter(m=>m.type==='prepared').at(-1);},request(path,method='GET'){let answer;handlers.get('fetch')({request:new Request('https://qingdao.test'+path,{method}),clientId:'qa',respondWith:promise=>{answer=promise;}});return answer;}};
 }
 function fixture(){const source='export const landmark="回澜阁";\n'+Array.from({length:70},(_,n)=>`// ${n} ${Math.sin(n)}`).join('\n'),asset=splitAsset(Buffer.from(source),48),key='/assets/babylon-recovery-test.js';return{source,key,asset,manifest:{[key]:{encoding:'gzip',byteLength:Buffer.byteLength(source),sha256:createHash('sha256').update(source).digest('hex'),parts:asset.parts.map(p=>({url:p.url,bytes:p.bytes.length}))}},byURL:new Map(asset.parts.map(p=>[p.url,p.bytes]))};}
 
@@ -43,4 +43,10 @@ test('successful parts survive a page reload and only a failed part is downloade
 test('a valid gzip payload with the wrong module digest is rejected and removed from part caches',async()=>{
  const f=fixture();f.manifest[f.key].sha256='0'.repeat(64);const worker=bootWorker(f.manifest,async url=>new Response(f.byURL.get(url)));
  const response=await worker.request(f.key);assert.equal(response.status,503);assert.match(await response.text(),/完整性校验失败/);
+});
+test('program preflight can recover before native import and then serve a verified cached module',async()=>{
+ const f=fixture();let failing=true,calls=0;
+ const worker=bootWorker(f.manifest,async url=>{calls++;return failing?new Response('offline',{status:503}):new Response(f.byURL.get(url));});
+ assert.equal((await worker.prepare()).ok,false);failing=false;assert.equal((await worker.prepare()).ok,true);
+ const before=calls;assert.equal(await(await worker.request(f.key)).text(),f.source);assert.equal(calls,before);
 });

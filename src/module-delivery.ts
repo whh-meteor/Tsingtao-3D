@@ -1,5 +1,6 @@
 import workerURL from 'virtual:module-worker-url';
 import {startupStatus,downloadStatus} from './startup-ui';
+import {retryWait} from './resource-recovery';
 
 /** Wait for control before import(); registration alone does not protect first load. */
 export async function prepareModuleDelivery(){
@@ -8,7 +9,7 @@ export async function prepareModuleDelivery(){
  const container=navigator.serviceWorker,expected=new URL(workerURL,location.origin).href;
  const receive=(event:MessageEvent)=>{
   if(event.source!==container.controller||event.data?.channel!=='qingdao-program')return;
-  const data=event.data;if(data.type==='progress')downloadStatus(/\/babylon-/.test(data.file)?'三维引擎':'场景程序',data);
+  const data=event.data;if(data.type==='progress')downloadStatus(/\/babylon-/.test(data.file)?'完整场景渲染程序（Babylon.js）':'城市程序',data);
   if(data.type==='error')startupStatus(`${data.message} · ${data.file}`);
  };
  container.addEventListener('message',receive);
@@ -38,4 +39,26 @@ export async function prepareModuleDelivery(){
   document.documentElement.dataset.programDelivery='chunks';startupStatus('三维程序分块下载已就绪');return true;
  }catch(error){container.removeEventListener('message',receive);document.documentElement.dataset.programDelivery='native';startupStatus(`${error instanceof Error?error.message:String(error)}，正在尝试标准加载`);return false;}
  finally{clearTimeout(timer);cancelWait?.();}
+}
+
+/** Retry network failures without poisoning native import() or reloading the preview. */
+export async function preparePrograms(){
+ for(let round=0;;round++){
+  const controller=navigator.serviceWorker.controller;
+  if(!controller)return;
+  const request=crypto.randomUUID();
+  const result=await new Promise<{ok:boolean;message?:string}>(resolve=>{
+   let timer:ReturnType<typeof setTimeout>;
+   const done=(result:{ok:boolean;message?:string})=>{clearTimeout(timer);navigator.serviceWorker.removeEventListener('message',receive);resolve(result);};
+   const receive=(event:MessageEvent)=>{
+    if(event.source!==controller||event.data?.channel!=='qingdao-program')return;
+    if(event.data.type==='progress'){clearTimeout(timer);timer=setTimeout(()=>done({ok:false,message:'程序下载暂时没有响应'}),150000);}
+    if(event.data.type==='prepared'&&event.data.request===request)done(event.data);
+   };
+   navigator.serviceWorker.addEventListener('message',receive);timer=setTimeout(()=>done({ok:false,message:'程序下载暂时没有响应'}),150000);
+   controller.postMessage({channel:'qingdao-program',type:'prepare',request});
+  });
+  if(result.ok)return;
+  const seconds=Math.min(30,3*2**Math.min(round,4));startupStatus(`完整三维程序连接中断，${seconds} 秒后自动续载；可继续探索轻量场景。`);await retryWait(seconds*1000);
+ }
 }

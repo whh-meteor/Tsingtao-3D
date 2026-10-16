@@ -25,6 +25,7 @@ import {buildCivicBuildings} from './civic-buildings';
 import {fetchJSON,fetchBuffer,createBackgroundLoader,configureAssetChunks} from './asset-loader';
 import assetChunks from 'virtual:asset-chunks';
 import {startupStatus,downloadStatus,startupFailure} from './startup-ui';
+import {recoverResource} from './resource-recovery';
 configureAssetChunks({...assetChunks,[havokWasmUrl]:assetChunks.havok});
 
 const app=document.querySelector<HTMLDivElement>('#app')!;
@@ -44,7 +45,7 @@ $('info').onclick=()=>$<HTMLDialogElement>('about').showModal();$('close-about')
 
 async function start(){
  const phase=async(text:string)=>{startupStatus(text);await new Promise<void>(resolve=>setTimeout(resolve,16));};
- const loadJSON=(url:string,label:string)=>fetchJSON(url,{onAttempt:(attempt,total)=>startupStatus(`正在下载${label}${attempt>1?` · 重试 ${attempt}/${total}`:''}`),onProgress:progress=>downloadStatus(label,progress)});
+ const loadJSON=(url:string,label:string)=>recoverResource(label,()=>fetchJSON(url,{onAttempt:(attempt,total)=>startupStatus(`正在下载${label}${attempt>1?` · 重试 ${attempt}/${total}`:''}`),onProgress:progress=>downloadStatus(label,progress)}));
  if(!Engine.IsSupported)throw new Error('此浏览器未启用 WebGL。请使用支持硬件加速的现代浏览器。');
  const engine=new Engine(canvas,true,{preserveDrawingBuffer:true,stencil:true,powerPreference:'high-performance'});
  engine.setHardwareScalingLevel(Math.max(1,window.devicePixelRatio/1.5));
@@ -64,7 +65,7 @@ async function start(){
  let beachSurface:ReturnType<typeof createBeachSurface>;
  const beachBounds=beachData.beaches.map((b:any)=>({minX:Math.min(...b.polygon.map((p:number[])=>p[0])),maxX:Math.max(...b.polygon.map((p:number[])=>p[0])),minZ:Math.min(...b.polygon.map((p:number[])=>p[1])),maxZ:Math.max(...b.polygon.map((p:number[])=>p[1]))}));
  await phase('正在加载真实高程与海岸地形');
- const terrain=await createTerrain(scene,region,data,raw=>{beachSurface=createBeachSurface(beachData,raw);const heritageSurface=createHeritageSurface(heritageData,raw);return(x,z)=>beachSurface.sampleSurface(x,z)??heritageSurface.sampleSurface(x,z);},beachBounds,beachData.metadata.groundCutMask,(x,z)=>beachSurface.contains(x,z));
+ const terrain=await recoverResource('真实高程',()=>createTerrain(scene,region,data,raw=>{beachSurface=createBeachSurface(beachData,raw);const heritageSurface=createHeritageSurface(heritageData,raw);return(x,z)=>beachSurface.sampleSurface(x,z)??heritageSurface.sampleSurface(x,z);},beachBounds,beachData.metadata.groundCutMask,(x,z)=>beachSurface.contains(x,z)));
  await phase('正在生成沙滩与地标模型');
  const beaches=buildBeaches(scene,beachData,terrain.sample);
  const civic=buildCivicBuildings(scene,civicData,shadows,terrain.sample);
@@ -94,14 +95,16 @@ async function start(){
    character=new PhysicsCharacterController(walkSpawn,{capsuleHeight:1.8,capsuleRadius:.3},scene);$('physics').textContent='Havok · 已启用';
   }catch(error){for(const aggregate of aggregates)aggregate.dispose();aggregates.length=0;scene.disablePhysicsEngine();$('physics').textContent='步行物理待补载';throw error;}
  }
+ let backgroundTimer:ReturnType<typeof setTimeout>|undefined,backgroundRound=0;
  const background=createBackgroundLoader([
   {label:'远景建筑',async load(){const d=await fetchJSON('/data/city-overview.json',{timeoutMs:120000});overview=buildCityOverview(scene,d,terrain.sample,new Set([...replaced,...data.buildings.map((b:any)=>String(b.id))]),coastalIds);}},
   {label:'区域道路与建筑',async load(){regional=await createRegional(scene,region,terrain.sample,data.bounds||data.metadata.bounds,replaced,bridge.excludedRoadIds,coastalIds);}},
   {label:'区域海岸',async load(){regionalLand=await fetchJSON('/data/regional-land.json',{timeoutMs:120000});}},
   {label:'地铁线路',async load(){const d=await fetchJSON('/data/metro.json',{timeoutMs:120000});metro=buildMetro(scene,d,terrain.sample);}},
   {label:'步行物理',load:preparePhysics}
- ],state=>{canvas.dataset.background=JSON.stringify(state);streamButton.hidden=!state.running&&state.completed===state.total;streamButton.disabled=state.running;streamButton.textContent=state.running?`城市细节加载中 ${state.completed}/${state.total}`:`${state.failed.join('、')}待加载 · 点击重试`;});
- streamButton.onclick=()=>void background.run();
+ ],state=>{canvas.dataset.background=JSON.stringify(state);streamButton.hidden=!state.running&&state.completed===state.total;streamButton.disabled=state.running;streamButton.textContent=state.running?`城市细节加载中 ${state.completed}/${state.total}`:`${state.failed.join('、')}待加载 · 将自动重试，也可点击重试`;if(!state.running&&state.completed<state.total){clearTimeout(backgroundTimer);backgroundTimer=setTimeout(()=>void background.run(),Math.min(30000,3000*2**Math.min(backgroundRound++,4)));}});
+ const retryBackground=()=>{clearTimeout(backgroundTimer);void background.run();};
+ streamButton.onclick=retryBackground;window.addEventListener('online',retryBackground);
  let metroEnabled=false,lightShowEnabled=true;
  $('metro-toggle').onclick=()=>{metroEnabled=!metroEnabled;$('metro-toggle').classList.toggle('active',metroEnabled);$('metro-toggle').setAttribute('aria-pressed',String(metroEnabled));toast(metroEnabled?'OSM 地铁线路光效：地下线路的地图展示':'已关闭地铁光带');};
  $('lightshow-toggle').onclick=()=>{lightShowEnabled=!lightShowEnabled;$('lightshow-toggle').classList.toggle('active',lightShowEnabled);$('lightshow-toggle').setAttribute('aria-pressed',String(lightShowEnabled));};
@@ -171,6 +174,9 @@ async function start(){
   $('clock').textContent=chinaTime(date);$('date').textContent=`${chinaDateParts(date).date} · 北京时间`;$('period').textContent=solar.altitude>6?'日间':solar.altitude>-6?'晨昏':'夜间';$('sun-altitude').textContent=`${solar.altitude.toFixed(1)}°`;$<HTMLInputElement>('hours').value=String(chinaDateParts(date).hours);
  }
  updateTimeState();updateSun(realtime?new Date():chinaInstant(day,hour));
+ // Preserve the view the visitor explored while resources were arriving.
+ try{const saved=JSON.parse(document.getElementById('quick-scene')?.dataset.camera||'null');if(saved&&saved.target?.length===3&&[...saved.target,saved.radius,saved.alpha,saved.beta].every((n:unknown)=>typeof n==='number'&&Number.isFinite(n))){orbit.setTarget(Vector3.FromArray(saved.target));orbit.radius=Math.max(35,Math.min(8000,saved.radius));orbit.alpha=saved.alpha;orbit.beta=Math.max(.2,Math.min(1.45,saved.beta));}}catch{}
+ let revealed=false;
  engine.runRenderLoop(()=>{const dt=Math.min(engine.getDeltaTime()/1000,.05);elapsed+=dt;
   mapControls.update(dt);
   orbit.panningSensibility=canvas.clientHeight/(2*Math.max(20,orbit.radius)*Math.tan(orbit.fov/2)*(1-orbit.panningInertia));
@@ -187,11 +193,11 @@ async function start(){
 
   if(elapsed-lastShadowCull>.15){lastShadowCull=elapsed;shadows.getShadowMap()!.renderList=shadowCandidates.filter(b=>b.mesh.isEnabled()&&Math.hypot(Math.max(b.minX-viewTarget.x,0,viewTarget.x-b.maxX),Math.max(b.minZ-viewTarget.z,0,viewTarget.z-b.maxZ))<1300).map(b=>b.mesh);}
   ocean.update(elapsed,new Vector3(solar.direction.x,solar.direction.y,solar.direction.z),sunColor,solar.daylight,top,horizon);scene.render();labels.update(elapsed);
+  if(!revealed){revealed=true;window.dispatchEvent(new Event('qingdao-scene-ready'));$('boot-root')?.remove();}
   if(elapsed-lastHUD>.5){lastHUD=elapsed;const now=realtime?new Date():chinaInstant(day,hour);if(realtime){day=chinaDateParts(now).date;hour=chinaDateParts(now).hours;}updateSun(now);$('fps').textContent=`${Math.round(engine.getFps())} FPS`;$('altitude').textContent=`${scene.activeCamera!.position.y.toFixed(1)} m`;canvas.dataset.camera=JSON.stringify({target:orbit.target.asArray(),radius:orbit.radius,alpha:orbit.alpha,beta:orbit.beta,mode});drawMap();}
  });
  window.addEventListener('resize',()=>engine.resize());
- $('boot-root').style.opacity='0';setTimeout(()=>$('boot-root')?.remove(),700);
  setTimeout(()=>void background.run(),0);
- (window as any).__demo={scene,engine,world,parks,heritage,bridge,get character(){return character;},setMode,solar:()=>solar,data,updateSun,terrain,get regional(){return regional;},region,beaches,civic,plazas,get overview(){return overview;},get metro(){return metro;},version:'0.4.6'};
+ (window as any).__demo={scene,engine,world,parks,heritage,bridge,get character(){return character;},setMode,solar:()=>solar,data,updateSun,terrain,get regional(){return regional;},region,beaches,civic,plazas,get overview(){return overview;},get metro(){return metro;},version:'0.5.0'};
 }
 start().catch(startupFailure);

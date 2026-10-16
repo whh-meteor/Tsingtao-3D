@@ -11,13 +11,13 @@
 </head>
 <body>
  <canvas id="scene" aria-label="青岛栈桥三维场景"></canvas><div id="app"></div>
- <section id="boot-root" aria-label="场景加载状态"><div>QINGDAO BAY</div><h2>风从海上来</h2><div class="spinner"></div><p id="load-status" role="status">正在下载启动程序</p><details><summary>加载详情 · v0.4.6</summary><ol id="load-log"><li>页面已连接，等待启动程序</li></ol></details><button id="boot-retry" hidden>重新加载</button><noscript>请启用 JavaScript 后重新加载。</noscript></section>
+ <section id="boot-root" aria-label="场景加载状态"><div>QINGDAO BAY</div><h2>风从海上来</h2><div class="spinner"></div><p id="load-status" role="status">正在下载启动程序</p><details><summary>加载详情 · v0.5.0</summary><ol id="load-log"><li>页面已连接，等待启动程序</li></ol></details><button id="boot-retry" hidden>重新加载</button><noscript>请启用 JavaScript 后重新加载。</noscript></section>
  <script>
  (()=>{
   const status=document.getElementById('load-status'),log=document.getElementById('load-log'),retry=document.getElementById('boot-retry');
-  retry.onclick=()=>location.reload();
+  retry.onclick=()=>{if(document.documentElement.dataset.bootStarted)window.dispatchEvent(new Event('qingdao-retry'));else location.reload();};
   window.addEventListener('error',event=>{const target=event.target;if(target instanceof HTMLScriptElement){status.textContent='启动脚本下载失败：'+target.src;const line=document.createElement('li');line.textContent=status.textContent;log.append(line);retry.hidden=false;}},true);
-  setTimeout(()=>{if(document.getElementById('boot-root')){retry.hidden=false;const line=document.createElement('li');line.textContent='启动超过20秒，请展开详情查看当前阶段；可重试已中断的下载。';log.append(line);}},20000);
+  setTimeout(()=>{if(document.getElementById('boot-root')){retry.hidden=false;retry.textContent='立即重试后台下载';const line=document.createElement('li');line.textContent='完整城市继续在后台下载，轻量场景可正常探索。中断后会自动重试。';log.append(line);}},20000);
  })();
  </script>
  <script type="module" src="/src/bootstrap.ts"></script>

@@ -31,6 +31,17 @@ async function reconstruct(path:string,ids:Set<string>){
 }
 sw.addEventListener('install',event=>event.waitUntil(sw.skipWaiting()));
 sw.addEventListener('activate',event=>event.waitUntil(sw.clients.claim()));
+// Fetch and verify programs BEFORE importing them. A failed native ES module
+// import stays failed in the browser module map until a full page navigation.
+sw.addEventListener('message',event=>{
+ const data=event.data,client=event.source as Client|null;
+ if(data?.channel!=='qingdao-program'||data.type!=='prepare'||!client?.id)return;
+ event.waitUntil((async()=>{
+  try{for(const path of Object.keys(manifest)){const response=await reconstruct(path,new Set([client.id]));if(!response.ok)throw new Error(await response.text());}
+   client.postMessage({channel:'qingdao-program',type:'prepared',request:data.request,ok:true});
+  }catch(error){client.postMessage({channel:'qingdao-program',type:'prepared',request:data.request,ok:false,message:error instanceof Error?error.message:String(error)});}
+ })());
+});
 sw.addEventListener('fetch',event=>{
  const url=new URL(event.request.url);
  if(event.request.method!=='GET'||url.origin!==sw.location.origin||!Object.hasOwn(manifest,url.pathname))return;
