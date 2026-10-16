@@ -41,3 +41,16 @@ test('a corrupt PNG cannot reach image decoding or texture upload',async()=>{
  let decoded=0;const resources=new ImageResources(async()=>bytes.slice(0,50),async()=>{decoded++;throw new Error('must not decode');});
  await assert.rejects(resources.load('/bad.png',sha),/校验/);assert.equal(decoded,0);
 });
+test('only a failed primary image switches to a commit-pinned same-file backup with digest verification',async()=>{
+ const calls=[],notices=[],backup='https://raw.githubusercontent.com/whh-meteor/Tsingtao-3D/'+'a'.repeat(40)+'/public/data/mask.png';
+ const images=new ImageResources(async url=>{calls.push(url);if(url==='/mask.png')throw new Error('primary closed');return bytes;},async()=>({image:{},release(){}}),url=>notices.push(url));
+ const result=await images.load('/mask.png',sha,backup);assert.deepEqual(calls,['/mask.png',backup]);assert.equal(result.source,backup);assert.deepEqual(notices,['/mask.png']);
+ const goodCalls=[],good=new ImageResources(async url=>{goodCalls.push(url);return bytes;},async()=>({image:{},release(){}}));
+ await good.load('/mask.png',sha,backup);assert.deepEqual(goodCalls,['/mask.png']);
+});
+test('untrusted backup locations are ignored and corrupted backup data cannot reach the decoder',async()=>{
+ let decoded=0;const calls=[],images=new ImageResources(async url=>{calls.push(url);if(url==='/mask.png')throw new Error('primary closed');return bytes.slice(0,50);},async()=>{decoded++;return{image:{},release(){}};});
+ await assert.rejects(images.load('/mask.png',sha,'https://example.invalid/mask.png'),/primary closed/);assert.deepEqual(calls,['/mask.png']);
+ const backup='https://raw.githubusercontent.com/whh-meteor/Tsingtao-3D/'+'a'.repeat(40)+'/public/data/mask.png';
+ await assert.rejects(images.load('/mask.png',sha,backup),/均未完整/);assert.equal(decoded,0);
+});

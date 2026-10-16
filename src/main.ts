@@ -65,11 +65,11 @@ async function start(){
  const data=await loadJSON('/data/scene.json','栈桥与老城区地图');
  const region:Region=await loadJSON('/data/region.json','区域索引');
  const [heritageData,bridgeData,beachData,civicData]=await Promise.all([['/data/heritage.json','历史地标'],['/data/bay-bridge.json','跨海大桥'],['/data/beaches.json','真实沙滩'],['/data/civic-landmarks.json','市政地标']].map(([url,label])=>loadJSON(url,label)));
- const images=new ImageResources(url=>fetchBuffer(url,{onProgress:p=>downloadStatus('关键纹理 '+url,p)})),textures=managedTextures(images);
+ const images=new ImageResources(url=>fetchBuffer(url,{...(url.startsWith('https:')?{timeoutMs:30000,attempts:1}:{}),onProgress:p=>downloadStatus('关键纹理 '+url.split('/').at(-1),p)}),undefined,url=>startupStatus(`主图片线路中断，正在从备用源下载并校验 ${url}`)),textures=managedTextures(images);
  scene.onDisposeObservable.add(()=>images.dispose());
  const imageURLs=criticalImageURLs(data,region,beachData);let readyImages=0;
  canvas.dataset.criticalImages=JSON.stringify({completed:0,total:imageURLs.length});
- await Promise.all(imageURLs.map(async url=>{await recoverResource('关键纹理 '+url,()=>images.load(url,assetChunks[url]?.sha256||''));canvas.dataset.criticalImages=JSON.stringify({completed:++readyImages,total:imageURLs.length});startupStatus(`关键纹理校验与解码 ${readyImages}/${imageURLs.length}`);}));
+ await Promise.all(imageURLs.map(async url=>{const decoded=await recoverResource('关键纹理 '+url,()=>images.load(url,assetChunks[url]?.sha256||'',assetChunks[url]?.backupURL));canvas.dataset.textureSources=JSON.stringify({...JSON.parse(canvas.dataset.textureSources||'{}'),[url]:decoded.source===url?'primary':'backup'});canvas.dataset.criticalImages=JSON.stringify({completed:++readyImages,total:imageURLs.length});startupStatus(`关键纹理校验与解码 ${readyImages}/${imageURLs.length}`);}));
  let regionalLand={land:data.land};
  let beachSurface:ReturnType<typeof createBeachSurface>;
  const beachBounds=beachData.beaches.map((b:any)=>({minX:Math.min(...b.polygon.map((p:number[])=>p[0])),maxX:Math.max(...b.polygon.map((p:number[])=>p[0])),minZ:Math.min(...b.polygon.map((p:number[])=>p[1])),maxZ:Math.max(...b.polygon.map((p:number[])=>p[1]))}));
@@ -207,6 +207,6 @@ async function start(){
   if(elapsed-lastHUD>.5){lastHUD=elapsed;const now=realtime?new Date():chinaInstant(day,hour);if(realtime){day=chinaDateParts(now).date;hour=chinaDateParts(now).hours;}updateSun(now);$('fps').textContent=`${Math.round(engine.getFps())} FPS`;$('altitude').textContent=`${scene.activeCamera!.position.y.toFixed(1)} m`;canvas.dataset.camera=JSON.stringify({target:orbit.target.asArray(),radius:orbit.radius,alpha:orbit.alpha,beta:orbit.beta,mode});drawMap();}
  });
  window.addEventListener('resize',()=>engine.resize());
- (window as any).__demo={scene,engine,world,parks,heritage,bridge,get character(){return character;},setMode,solar:()=>solar,data,updateSun,terrain,get regional(){return regional;},region,beaches,civic,plazas,get overview(){return overview;},get metro(){return metro;},version:'0.5.2'};
+ (window as any).__demo={scene,engine,world,parks,heritage,bridge,get character(){return character;},setMode,solar:()=>solar,data,updateSun,terrain,get regional(){return regional;},region,beaches,civic,plazas,get overview(){return overview;},get metro(){return metro;},version:'0.5.3'};
 }
 start().catch(startupFailure);

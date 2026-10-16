@@ -1,6 +1,6 @@
 import {fetchBuffer,forgetAssetChunks,AssetDownloadError} from './asset-loader';
 
-export type DecodedImage={image:HTMLImageElement;release:()=>void};
+export type DecodedImage={image:HTMLImageElement;release:()=>void;source?:string};
 export async function verifyPNG(bytes:ArrayBuffer,sha256:string){
  const a=new Uint8Array(bytes),signature=[137,80,78,71,13,10,26,10];
  if(a.length<33||!signature.every((n,i)=>a[i]===n))throw new AssetDownloadError('图片不是完整的 PNG 数据');
@@ -19,13 +19,19 @@ export function decodePNG(bytes:ArrayBuffer):Promise<DecodedImage>{return new Pr
 export class ImageResources{
  private pending=new Map<string,Promise<DecodedImage>>();
  private decoded=new Map<string,DecodedImage>();
- constructor(private fetchBytes=fetchBuffer,private decode=decodePNG){}
- async load(url:string,sha256:string){
+ constructor(private fetchBytes=fetchBuffer,private decode=decodePNG,private usingBackup:(url:string)=>void=()=>{}){}
+ async load(url:string,sha256:string,backupURL?:string){
   if(!/^[a-f0-9]{64}$/.test(sha256))throw new Error('缺少纹理构建摘要：'+url);
   let pending=this.pending.get(url);
-  if(!pending){pending=(async()=>{const bytes=await this.fetchBytes(url);
-   try{await verifyPNG(bytes,sha256);}catch(error){await forgetAssetChunks(url);throw error;}
-   const decoded=await this.decode(bytes);this.decoded.set(url,decoded);return decoded;
+  if(!pending){pending=(async()=>{let bytes:ArrayBuffer,source=url;
+   try{bytes=await this.fetchBytes(url);try{await verifyPNG(bytes,sha256);}catch(error){await forgetAssetChunks(url);throw error;}}
+   catch(primaryError){
+    if(!backupURL||!/^https:\/\/raw\.githubusercontent\.com\/whh-meteor\/Tsingtao-3D\/[a-f0-9]{40}\/public\/data\/[\w-]+\.png$/.test(backupURL))throw primaryError;
+    source=backupURL;this.usingBackup(url);
+    try{bytes=await this.fetchBytes(backupURL);await verifyPNG(bytes,sha256);}
+    catch(backupError){throw new AssetDownloadError('主线路与备用源均未完整取得纹理：'+url,primaryError instanceof AssetDownloadError&&primaryError.permanent&&backupError instanceof AssetDownloadError&&backupError.permanent,{primaryError,backupError});}
+   }
+   const decoded=await this.decode(bytes);decoded.source=source;this.decoded.set(url,decoded);return decoded;
   })();this.pending.set(url,pending);pending.catch(()=>{if(this.pending.get(url)===pending)this.pending.delete(url);});}
   return pending;
  }

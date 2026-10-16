@@ -2,6 +2,7 @@ import {readFileSync} from 'node:fs';
 import {gzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 import path from 'node:path';
+import {sourceCommit} from './source-commit.mjs';
 
 // Opaque 32 KiB files avoid restarting a whole multi-megabyte transfer.
 export function splitAsset(source,chunkSize=32768){
@@ -27,7 +28,7 @@ export function assetChunksPlugin(){
   files.push(...imageFiles().map(url=>[url,'public'+url]));
   files.push(['havok','node_modules/@babylonjs/havok/lib/esm/HavokPhysics.wasm']);
   const manifest={},blobs=new Map();
-  for(const [key,file]of files){const bytes=readFileSync(path.resolve(file)),asset=splitAsset(bytes);manifest[key]={encoding:asset.encoding,byteLength:asset.byteLength,...(key.endsWith('.png')?{sha256:createHash('sha256').update(bytes).digest('hex')}:{ }),parts:asset.parts.map(p=>({url:p.url,bytes:p.bytes.length}))};for(const part of asset.parts)blobs.set(part.url,part.bytes);}
+  for(const [key,file]of files){const bytes=readFileSync(path.resolve(file)),asset=splitAsset(bytes);manifest[key]={encoding:asset.encoding,byteLength:asset.byteLength,...(key.endsWith('.png')?{sha256:createHash('sha256').update(bytes).digest('hex'),...(sourceCommit()?{backupURL:`https://raw.githubusercontent.com/whh-meteor/Tsingtao-3D/${sourceCommit()}/public${key}`}:{})}:{ }),parts:asset.parts.map(p=>({url:p.url,bytes:p.bytes.length}))};for(const part of asset.parts)blobs.set(part.url,part.bytes);}
   return built={manifest,blobs};
  }
  return{name:'qingdao-small-asset-transfers',

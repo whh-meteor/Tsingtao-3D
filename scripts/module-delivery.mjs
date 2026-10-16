@@ -3,6 +3,7 @@ import {createHash} from 'node:crypto';
 import {buildSync} from 'esbuild';
 import {splitAsset,imageFiles} from './asset-chunks.mjs';
 import path from 'node:path';
+import {sourceCommit} from './source-commit.mjs';
 
 function sourceRevision(){
  const hash=createHash('sha256');
@@ -13,7 +14,7 @@ function sourceRevision(){
  data.push(...[region.terrain,region.detailTerrain,...region.landmarkTerrain||[]].map(grid=>'public'+grid.file));
  data.push(...imageFiles().map(url=>'public'+url));
  for(const file of [...walk('src'),...walk('worker'),...walk('scripts'),'vite.config.ts','package.json','package-lock.json',...data].sort()){hash.update(file.replaceAll('\\','/'));hash.update('\0');hash.update(readFileSync(file));}
- hash.update(process.platform+'/'+process.version+'/'+process.versions.zlib);return hash.digest('hex').slice(0,16);
+ hash.update(sourceCommit());hash.update(process.platform+'/'+process.version+'/'+process.versions.zlib);return hash.digest('hex').slice(0,16);
 }
 
 export function createModuleDelivery(bundle){
