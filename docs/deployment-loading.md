@@ -1,5 +1,7 @@
 # 线上加载失败排查与改进
 
+最新v0.4.5针对“引擎JavaScript仍整包下载”的断点继续改进，见 [启动与资源交付架构](loading-architecture.md)。下面保留各轮证据与修复范围，不能把早先版本的本地测试当作当前线上成功的证明。
+
 2026-10-15，在已部署页面的控制台中定位到 `/data/city-overview.json` 返回响应头200，但随后 `ERR_CONNECTION_CLOSED`，页面报 `TypeError: Failed to fetch`。原启动代码把该文件放在必需数据的 `Promise.all` 中；一份远景建筑数据失败，会让整个主场景初始化退出。
 
 HTTP复测该文件确实存在，Content-Type为application/json，Cloudflare缓存HIT且启用Brotli。一次完整读取1,858,263字节约85秒，另一次读取超时。这证明传输有明显慢速/中断现象，不能仅因200状态判断文件已经完整下载；这些记录也不足以单独认定是Cloudflare、运营商、本机代理或浏览器扩展中的哪一环关闭连接。

@@ -3,3 +3,13 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+/module-worker.js
+  Cache-Control: no-cache
+  Service-Worker-Allowed: /
+
+/module-delivery.json
+  Cache-Control: no-cache
+
+/
+  Cache-Control: no-cache

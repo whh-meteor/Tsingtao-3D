@@ -1,8 +1,11 @@
 export type Progress={loaded:number;total?:number;completed?:number;parts?:number};
 type Options={attempts?:number;timeoutMs?:number;retryDelayMs?:number;onAttempt?:(attempt:number,total:number)=>void;onProgress?:(progress:Progress)=>void};
 export type ChunkedAsset={encoding:'gzip';byteLength:number;parts:{url:string;bytes:number}[]};
+export type PartCache={get:(url:string)=>Promise<ArrayBuffer|undefined>;put:(url:string,bytes:ArrayBuffer)=>Promise<void>;delete:(url:string)=>Promise<void>};
 let chunks:Record<string,ChunkedAsset>={};
-export function configureAssetChunks(manifest:Record<string,ChunkedAsset>){chunks=manifest;}
+let partCache:PartCache|undefined;
+export function configureAssetChunks(manifest:Record<string,ChunkedAsset>,cache?:PartCache){chunks=manifest;partCache=cache;}
+export async function forgetAssetChunks(url:string){await Promise.all((chunks[url]?.parts??[]).map(async part=>{cachedParts.delete(part.url);await partCache?.delete(part.url);}));}
 const cachedParts=new Map<string,Promise<ArrayBuffer>>();
 let active=0;const waiting:(()=>void)[]=[];
 async function limited<T>(work:()=>Promise<T>){if(active>=4)await new Promise<void>(resolve=>waiting.push(resolve));else active++;try{return await work();}finally{const next=waiting.shift();if(next)next();else active--;}}
@@ -34,13 +37,13 @@ async function readChunks(url:string,asset:ChunkedAsset,options:Options={}){
  try{
   const pieces=await Promise.all(asset.parts.map(async part=>{
    let pending=cachedParts.get(part.url);
-   if(!pending){pending=limited(()=>load(part.url,async response=>{const result=await readBuffer(response,p=>{received.set(part.url,p.loaded);progress();});if(result.byteLength!==part.bytes)throw new Error('分块长度不完整');return result;},{...options,timeoutMs:Math.min(options.timeoutMs??30000,30000)}));cachedParts.set(part.url,pending);pending.catch(()=>{if(cachedParts.get(part.url)===pending)cachedParts.delete(part.url);});}
+   if(!pending){pending=limited(async()=>{const saved=await partCache?.get(part.url);if(saved?.byteLength===part.bytes)return saved;const result=await load(part.url,async response=>{const bytes=await readBuffer(response,p=>{received.set(part.url,p.loaded);progress();});if(bytes.byteLength!==part.bytes)throw new Error('分块长度不完整');return bytes;},{...options,timeoutMs:Math.min(options.timeoutMs??30000,30000)});await partCache?.put(part.url,result);return result;});cachedParts.set(part.url,pending);pending.catch(()=>{if(cachedParts.get(part.url)===pending)cachedParts.delete(part.url);});}
    const bytes=await pending;received.set(part.url,bytes.byteLength);completed++;progress();return bytes;
   }));
   const zipped=new Uint8Array(total);let offset=0;for(const part of pieces){zipped.set(new Uint8Array(part),offset);offset+=part.byteLength;}
   let decoded:ArrayBuffer;
   try{decoded=await new Response(new Blob([zipped]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();if(decoded.byteLength!==asset.byteLength)throw new Error('解压后的资源长度不完整');}
-  catch(error){for(const part of asset.parts)cachedParts.delete(part.url);throw error;}
+  catch(error){await forgetAssetChunks(url);throw error;}
   // Retain a bounded set of completed pieces for retries, not every regional tile.
   while(cachedParts.size>512)cachedParts.delete(cachedParts.keys().next().value!);
   return decoded;
