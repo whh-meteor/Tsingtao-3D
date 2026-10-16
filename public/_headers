@@ -11,5 +11,8 @@
 /module-delivery.json
   Cache-Control: no-cache
 
+/image-delivery.json
+  Cache-Control: no-cache
+
 /
   Cache-Control: no-cache

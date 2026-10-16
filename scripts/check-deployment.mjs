@@ -3,14 +3,14 @@ import {gunzipSync} from 'node:zlib';
 import {createHash} from 'node:crypto';
 
 const origin=new URL(process.argv[2]||'https://tsingtao.cupgis.cn/');
-const report={origin:origin.origin,checkedAtUTC:new Date().toISOString(),resources:[],errors:[]};
+const report={origin:origin.origin,checkedAtUTC:new Date().toISOString(),resources:[],attempts:[],errors:[]};
 async function download(path,expectedBytes){
  const url=new URL(path,origin);if(url.origin!==origin.origin)throw new Error('检查清单包含其他域名：'+url.origin);
  const started=performance.now();let cause;
  for(let attempt=1;attempt<=2;attempt++){
-  let status=0;
-  try{const response=await fetch(url,{signal:AbortSignal.timeout(30000),cache:'no-store'});status=response.status;if(!response.ok)throw new Error(`HTTP ${response.status}`);const bytes=Buffer.from(await response.arrayBuffer());if(expectedBytes!==undefined&&bytes.length!==expectedBytes)throw new Error(`长度不符：${bytes.length}/${expectedBytes}`);report.resources.push({path:url.pathname,bytes:bytes.length,attempt,milliseconds:Math.round(performance.now()-started)});return bytes;}
-  catch(error){cause=error;if(status>=400&&status<500&&![408,429].includes(status))break;}
+  let status=0,received=0,ray=null;
+  try{const response=await fetch(url,{signal:AbortSignal.timeout(30000),cache:'no-store'});status=response.status;ray=response.headers.get('cf-ray');if(!response.ok)throw new Error(`HTTP ${response.status}`);const blocks=[];if(response.body){for await(const block of response.body){received+=block.byteLength;blocks.push(Buffer.from(block));}}const bytes=Buffer.concat(blocks);if(expectedBytes!==undefined&&bytes.length!==expectedBytes)throw new Error(`长度不符：${bytes.length}/${expectedBytes}`);report.resources.push({path:url.pathname,bytes:bytes.length,attempt,ray,milliseconds:Math.round(performance.now()-started)});return bytes;}
+  catch(error){cause=error;report.attempts.push({path:url.pathname,attempt,status,received,ray,error:error.message,cause:error.cause?.code,milliseconds:Math.round(performance.now()-started)});if(status>=400&&status<500&&![408,429].includes(status))break;}
  }
  const message=`${url.pathname}: ${cause.message}`;report.errors.push(message);throw new Error(message);
 }
@@ -33,6 +33,14 @@ try{
   const source=gunzipSync(Buffer.concat(pieces),{maxOutputLength:spec.byteLength});
   if(source.length!==spec.byteLength||createHash('sha256').update(source).digest('hex')!==spec.sha256)throw new Error('程序完整性校验失败：'+path);
  }
- console.log('入口、下载器及全部大型程序分块校验通过。此检查不替代浏览器渲染验收。');
+ const images=JSON.parse((await download('/image-delivery.json')).toString('utf8'));
+ if(images.version!==report.version)throw new Error('HTML与图片交付清单版本不同');
+ for(const[path,spec]of Object.entries(images.images)){
+  console.log(`校验关键图片 ${path}：${spec.parts.length} 个分块`);
+  const pieces=await parallel(spec.parts,part=>{if(!/^\/data\/segments\/[a-f0-9]+-\d+\.bin$/.test(part.url)||part.bytes>32768)throw new Error('无效的图片分块路径/尺寸');return download(part.url,part.bytes);});
+  const source=gunzipSync(Buffer.concat(pieces),{maxOutputLength:spec.byteLength});
+  if(source.length!==spec.byteLength||createHash('sha256').update(source).digest('hex')!==spec.sha256||!source.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10])))throw new Error('PNG完整性校验失败：'+path);
+ }
+ console.log('入口、下载器、全部大型程序及关键图片分块校验通过。此检查不替代浏览器解码与渲染验收。');
 }catch(error){if(!report.errors.includes(error.message))report.errors.push(error.message);console.error('部署检查失败：'+error.message);process.exitCode=1;}
 finally{await mkdir(new URL('../artifacts/',import.meta.url),{recursive:true});await writeFile(new URL('../artifacts/deployment-check.json',import.meta.url),JSON.stringify(report,null,2)+'\n');}

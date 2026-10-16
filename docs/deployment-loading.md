@@ -1,5 +1,7 @@
 # 线上加载失败排查与改进
 
+最新v0.5.2针对PNG图片未进入受控下载通道、首次渲染就撤销加载页的遗漏，恢复完整加载页及关键纹理就绪屏障。见 [红黑棋盘根因分析](texture-loading-root-cause.md)。
+
 v0.4.5起针对“引擎JavaScript仍整包下载”的断点继续改进，见 [启动与资源交付架构](loading-architecture.md)。下面保留各轮证据与修复范围，不能把早先版本的本地测试当作当前线上成功的证明。
 
 2026-10-15，在已部署页面的控制台中定位到 `/data/city-overview.json` 返回响应头200，但随后 `ERR_CONNECTION_CLOSED`，页面报 `TypeError: Failed to fetch`。原启动代码把该文件放在必需数据的 `Promise.all` 中；一份远景建筑数据失败，会让整个主场景初始化退出。

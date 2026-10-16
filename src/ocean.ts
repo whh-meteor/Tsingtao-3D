@@ -1,4 +1,5 @@
 import { Scene, ShaderMaterial, MeshBuilder, Vector3, Vector4, Color3, Color4, Texture, MirrorTexture, Plane, Matrix, AbstractMesh } from './babylon';
+import type {TextureFactory} from './managed-textures';
 
 // Original GLSL implementation: directional wave synthesis, Fresnel and planar reflection.
 // Architectural reference: three.js examples/jsm/objects/Water.js (MIT), see THIRD_PARTY.md.
@@ -66,7 +67,7 @@ void main(){
 #include<logDepthFragment>
 }`;
 
-export function createOcean(scene: Scene, shore: {url?:string,bounds:{minX:number,minZ:number,maxX:number,maxZ:number},maxDistance?:number,regional?:{url:string,bounds:{minX:number,minZ:number,maxX:number,maxZ:number}}}, reflectionMeshes: AbstractMesh[]) {
+export function createOcean(scene: Scene, shore: {url?:string,bounds:{minX:number,minZ:number,maxX:number,maxZ:number},maxDistance?:number,regional?:{url:string,bounds:{minX:number,minZ:number,maxX:number,maxZ:number}}}, reflectionMeshes: AbstractMesh[],textureFactory:TextureFactory=(url,s,sampling)=>new Texture(url,s,false,false,sampling)) {
   const mirror = new MirrorTexture('bay-reflection', 768, scene, false);
   mirror.mirrorPlane = new Plane(0,-1,0,0.03);
   mirror.clearColor = new Color4(0,0,0,0);
@@ -76,9 +77,9 @@ export function createOcean(scene: Scene, shore: {url?:string,bounds:{minX:numbe
   mirror.onBeforeRenderObservable.add(() => { reflectionVP = scene.getTransformMatrix().clone(); });
   const mat = new ShaderMaterial('qingdao-ocean',scene,{vertexSource:vertex,fragmentSource:fragment},{attributes:['position','uv'],uniforms:['world','worldViewProjection','reflectionVP','time','wind','waveHeight','daylight','foamStrength','eye','sunDirection','sunColor','skyTop','skyHorizon','shoreBounds','regionalShoreBounds','shoreMaxDistance'],samplers:['shoreMap','regionalShoreMap','mirrorMap']});
   mat.backFaceCulling = false;mat.useLogarithmicDepth=true;
-  mat.setTexture('shoreMap',new Texture(shore.url || '/data/shore-distance.png',scene,false,false,Texture.BILINEAR_SAMPLINGMODE));
+  mat.setTexture('shoreMap',textureFactory(shore.url || '/data/shore-distance.png',scene,Texture.BILINEAR_SAMPLINGMODE));
   mat.setTexture('mirrorMap',mirror);
-  const region=shore.regional;mat.setTexture('regionalShoreMap',new Texture(region?.url || shore.url || '/data/shore-distance.png',scene,false,false,Texture.BILINEAR_SAMPLINGMODE));const rb=region?.bounds || shore.bounds;mat.setVector4('regionalShoreBounds',new Vector4(rb.minX,rb.minZ,rb.maxX-rb.minX,rb.maxZ-rb.minZ));
+  const region=shore.regional;mat.setTexture('regionalShoreMap',textureFactory(region?.url || shore.url || '/data/shore-distance.png',scene,Texture.BILINEAR_SAMPLINGMODE));const rb=region?.bounds || shore.bounds;mat.setVector4('regionalShoreBounds',new Vector4(rb.minX,rb.minZ,rb.maxX-rb.minX,rb.maxZ-rb.minZ));
   const b=shore.bounds;mat.setVector4('shoreBounds',new Vector4(b.minX,b.minZ,b.maxX-b.minX,b.maxZ-b.minZ));
   mat.setFloat('shoreMaxDistance',shore.maxDistance || 100);
   const ocean = MeshBuilder.CreateGround('bay-near',{width:6000,height:6000,subdivisions:220},scene);

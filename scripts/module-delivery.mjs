@@ -1,7 +1,7 @@
 import {readFileSync,readdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {buildSync} from 'esbuild';
-import {splitAsset} from './asset-chunks.mjs';
+import {splitAsset,imageFiles} from './asset-chunks.mjs';
 import path from 'node:path';
 
 function sourceRevision(){
@@ -11,6 +11,7 @@ function sourceRevision(){
  const region=JSON.parse(readFileSync('public/data/region.json','utf8'));
  const data=['scene.json','region.json','heritage.json','bay-bridge.json','beaches.json','civic-landmarks.json','city-overview.json','regional-roads.json','regional-land.json','metro.json','chunks/index.json'].map(name=>'public/data/'+name);
  data.push(...[region.terrain,region.detailTerrain,...region.landmarkTerrain||[]].map(grid=>'public'+grid.file));
+ data.push(...imageFiles().map(url=>'public'+url));
  for(const file of [...walk('src'),...walk('worker'),...walk('scripts'),'vite.config.ts','package.json','package-lock.json',...data].sort()){hash.update(file.replaceAll('\\','/'));hash.update('\0');hash.update(readFileSync(file));}
  hash.update(process.platform+'/'+process.version+'/'+process.versions.zlib);return hash.digest('hex').slice(0,16);
 }

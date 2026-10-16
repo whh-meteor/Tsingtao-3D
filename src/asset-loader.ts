@@ -1,6 +1,6 @@
 export type Progress={loaded:number;total?:number;completed?:number;parts?:number};
 type Options={attempts?:number;timeoutMs?:number;retryDelayMs?:number;onAttempt?:(attempt:number,total:number)=>void;onProgress?:(progress:Progress)=>void};
-export type ChunkedAsset={encoding:'gzip';byteLength:number;parts:{url:string;bytes:number}[]};
+export type ChunkedAsset={encoding:'gzip';byteLength:number;sha256?:string;parts:{url:string;bytes:number}[]};
 export type PartCache={get:(url:string)=>Promise<ArrayBuffer|undefined>;put:(url:string,bytes:ArrayBuffer)=>Promise<void>;delete:(url:string)=>Promise<void>};
 let chunks:Record<string,ChunkedAsset>={};
 let partCache:PartCache|undefined;

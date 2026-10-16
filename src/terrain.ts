@@ -1,11 +1,12 @@
 import { Scene, Mesh, VertexData, StandardMaterial, Color3, Texture } from './babylon';
 
 import {fetchBuffer} from './asset-loader';
+import type {TextureFactory} from './managed-textures';
 import { sampleGrid, sampleSurface, type Bounds, type HeightGrid } from './height';
 export type { Bounds, HeightGrid } from './height';
 export interface Region { bounds:Bounds; districts:{id:string;name:string;center:number[];polygons:{polygon:number[][];holes:number[][][]}[]}[];terrain:HeightGrid;detailTerrain:HeightGrid;landmarkTerrain?:HeightGrid[];regionalRoadsFile:string;chunksIndexFile:string;metadata:any }
 function contains(b:Bounds,x:number,z:number){return x>=b.minX&&x<=b.maxX&&z>=b.minZ&&z<=b.maxZ;}
-export async function createTerrain(scene:Scene,region:Region,local:any,surfaceFactory?:(raw:(x:number,z:number)=>number)=>((x:number,z:number)=>number|null),coastalBounds:Bounds[]=[],beachMask?:{url:string;bounds:Bounds},beachContains:(x:number,z:number)=>boolean=()=>false){
+export async function createTerrain(scene:Scene,region:Region,local:any,surfaceFactory?:(raw:(x:number,z:number)=>number)=>((x:number,z:number)=>number|null),coastalBounds:Bounds[]=[],beachMask?:{url:string;bounds:Bounds},beachContains:(x:number,z:number)=>boolean=()=>false,textureFactory:TextureFactory=(url,s,sampling)=>new Texture(url,s,false,false,sampling)){
  const grids=[region.terrain,region.detailTerrain,...region.landmarkTerrain||[]];
  const values=await Promise.all(grids.map(async g=>{const buffer=await fetchBuffer(g.file);if(buffer.byteLength!==g.width*g.height*4)throw new Error('高程文件不完整：'+g.file);return new Float32Array(buffer);}));
  const original=values.map(a=>a.slice());const [macro,detail]=values;
@@ -22,12 +23,12 @@ export async function createTerrain(scene:Scene,region:Region,local:any,surfaceF
  // A raster land mask cuts the genuine height mesh at the geographic coastline.
  // DEM water cells never become invented islands; the local OSM mask has precedence.
  const mask=region.metadata?.terrainPalette||local.regionalLandMask || region.metadata?.landMask;
- if(mask){const texture=new Texture(mask.url,scene,false,false,Texture.BILINEAR_SAMPLINGMODE);texture.hasAlpha=true;material.diffuseTexture=texture;material.useAlphaFromDiffuseTexture=true;material.transparencyMode=1;material.alphaCutOff=.45;}
+ if(mask){const texture=textureFactory(mask.url,scene,Texture.BILINEAR_SAMPLINGMODE);texture.hasAlpha=true;material.diffuseTexture=texture;material.useAlphaFromDiffuseTexture=true;material.transparencyMode=1;material.alphaCutOff=.45;}
  const collisionMeshes:Mesh[]=[];
  const detailMaterial=material.clone('detailed-coastal-ground')!;
  const detailMask=region.metadata?.detailTerrainPalette||region.metadata?.detailLandMask;
- if(detailMask){const t=new Texture(detailMask.url,scene,false,false,Texture.BILINEAR_SAMPLINGMODE);t.hasAlpha=true;t.wrapU=t.wrapV=Texture.CLAMP_ADDRESSMODE;detailMaterial.diffuseTexture=t;detailMaterial.useAlphaFromDiffuseTexture=true;detailMaterial.transparencyMode=1;detailMaterial.alphaCutOff=.45;}
- if(beachMask){for(const [mat,b]of [[material,region.bounds],[detailMaterial,region.metadata?.detailLandMask?.bounds||region.detailTerrain.bounds]]as[StandardMaterial,Bounds][]){const t=new Texture(beachMask.url,scene,false,false,Texture.BILINEAR_SAMPLINGMODE),q=beachMask.bounds;t.hasAlpha=true;t.getAlphaFromRGB=false;t.wrapU=t.wrapV=Texture.CLAMP_ADDRESSMODE;t.uRotationCenter=t.vRotationCenter=0;t.uScale=(b.maxX-b.minX)/(q.maxX-q.minX);t.vScale=(b.maxZ-b.minZ)/(q.maxZ-q.minZ);t.uOffset=(b.minX-q.minX)/(q.maxX-q.minX);t.vOffset=(q.maxZ-b.maxZ)/(q.maxZ-q.minZ);mat.opacityTexture=t;}}
+ if(detailMask){const t=textureFactory(detailMask.url,scene,Texture.BILINEAR_SAMPLINGMODE);t.hasAlpha=true;t.wrapU=t.wrapV=Texture.CLAMP_ADDRESSMODE;detailMaterial.diffuseTexture=t;detailMaterial.useAlphaFromDiffuseTexture=true;detailMaterial.transparencyMode=1;detailMaterial.alphaCutOff=.45;}
+ if(beachMask){for(const [mat,b]of [[material,region.bounds],[detailMaterial,region.metadata?.detailLandMask?.bounds||region.detailTerrain.bounds]]as[StandardMaterial,Bounds][]){const t=textureFactory(beachMask.url,scene,Texture.BILINEAR_SAMPLINGMODE),q=beachMask.bounds;t.hasAlpha=true;t.getAlphaFromRGB=false;t.wrapU=t.wrapV=Texture.CLAMP_ADDRESSMODE;t.uRotationCenter=t.vRotationCenter=0;t.uScale=(b.maxX-b.minX)/(q.maxX-q.minX);t.vScale=(b.maxZ-b.minZ)/(q.maxZ-q.minZ);t.uOffset=(b.minX-q.minX)/(q.maxX-q.minX);t.vOffset=(q.maxZ-b.maxZ)/(q.maxZ-q.minZ);mat.opacityTexture=t;}}
  function patch(grid:HeightGrid,values:Float32Array,step:number,name:string,skipDetail:boolean,localTexture=false,coastal=false){
   const p:number[]=[],idx:number[]=[],colors:number[]=[],uv:number[]=[];const b=grid.bounds;
   for(let r=0;r<grid.height;r+=step)for(let c=0;c<grid.width;c+=step){const x=b.minX+c*grid.spacingX,z=b.maxZ-r*grid.spacingZ,h=values[r*grid.width+c];p.push(x,surfaceOverride?.(x,z)??Math.max(2.4,h),z);

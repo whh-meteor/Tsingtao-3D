@@ -12,6 +12,7 @@ import '@babylonjs/core/Shaders/fxaa.fragment';
 import '@babylonjs/core/Shaders/fxaa.vertex';
 import '@babylonjs/core/Shaders/postprocess.vertex';
 export { Engine } from '@babylonjs/core/Engines/engine';
+export { EngineStore } from '@babylonjs/core/Engines/engineStore';
 export { Scene } from '@babylonjs/core/scene';
 export { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera';
 export { FreeCamera } from '@babylonjs/core/Cameras/freeCamera';

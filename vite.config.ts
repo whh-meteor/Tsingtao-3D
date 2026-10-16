@@ -2,9 +2,9 @@ import { defineConfig } from 'vite';
 import {assetChunksPlugin} from './scripts/asset-chunks.mjs';
 import {startupGraphGuard} from './scripts/startup-graph.mjs';
 import {moduleDeliveryPlugin} from './scripts/module-delivery.mjs';
-import {quickScenePlugin} from './scripts/quick-scene.mjs';
+import {startupStylesPlugin} from './scripts/startup-styles.mjs';
 export default defineConfig({
-  plugins: [assetChunksPlugin(),startupGraphGuard(),moduleDeliveryPlugin(),quickScenePlugin()],
+  plugins: [assetChunksPlugin(),startupGraphGuard(),moduleDeliveryPlugin(),startupStylesPlugin()],
   build: {
     cssCodeSplit: false,
     rollupOptions: {

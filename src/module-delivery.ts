@@ -59,6 +59,6 @@ export async function preparePrograms(){
    controller.postMessage({channel:'qingdao-program',type:'prepare',request});
   });
   if(result.ok)return;
-  const seconds=Math.min(30,3*2**Math.min(round,4));startupStatus(`完整三维程序连接中断，${seconds} 秒后自动续载；可继续探索轻量场景。`);await retryWait(seconds*1000);
+  const seconds=Math.min(30,3*2**Math.min(round,4));startupStatus(`完整三维程序连接中断，${seconds} 秒后自动续载；加载页会保留，已完成的分块将复用。`);await retryWait(seconds*1000);
  }
 }

@@ -26,6 +26,9 @@ import {fetchJSON,fetchBuffer,createBackgroundLoader,configureAssetChunks} from 
 import assetChunks from 'virtual:asset-chunks';
 import {startupStatus,downloadStatus,startupFailure} from './startup-ui';
 import {recoverResource} from './resource-recovery';
+import {ImageResources,criticalImageURLs} from './image-resources';
+import {managedTextures} from './managed-textures';
+import {EngineStore} from './babylon';
 configureAssetChunks({...assetChunks,[havokWasmUrl]:assetChunks.havok});
 
 const app=document.querySelector<HTMLDivElement>('#app')!;
@@ -44,6 +47,7 @@ let toastTimer=0;function toast(text:string){$('toast').textContent=text;$('toas
 $('info').onclick=()=>$<HTMLDialogElement>('about').showModal();$('close-about').onclick=()=>$<HTMLDialogElement>('about').close();$('panel-toggle').onclick=()=>document.querySelector('.controls')!.classList.toggle('collapsed');
 
 async function start(){
+ EngineStore.UseFallbackTexture=false;
  const phase=async(text:string)=>{startupStatus(text);await new Promise<void>(resolve=>setTimeout(resolve,16));};
  const loadJSON=(url:string,label:string)=>recoverResource(label,()=>fetchJSON(url,{onAttempt:(attempt,total)=>startupStatus(`正在下载${label}${attempt>1?` · 重试 ${attempt}/${total}`:''}`),onProgress:progress=>downloadStatus(label,progress)}));
  if(!Engine.IsSupported)throw new Error('此浏览器未启用 WebGL。请使用支持硬件加速的现代浏览器。');
@@ -61,11 +65,16 @@ async function start(){
  const data=await loadJSON('/data/scene.json','栈桥与老城区地图');
  const region:Region=await loadJSON('/data/region.json','区域索引');
  const [heritageData,bridgeData,beachData,civicData]=await Promise.all([['/data/heritage.json','历史地标'],['/data/bay-bridge.json','跨海大桥'],['/data/beaches.json','真实沙滩'],['/data/civic-landmarks.json','市政地标']].map(([url,label])=>loadJSON(url,label)));
+ const images=new ImageResources(url=>fetchBuffer(url,{onProgress:p=>downloadStatus('关键纹理 '+url,p)})),textures=managedTextures(images);
+ scene.onDisposeObservable.add(()=>images.dispose());
+ const imageURLs=criticalImageURLs(data,region,beachData);let readyImages=0;
+ canvas.dataset.criticalImages=JSON.stringify({completed:0,total:imageURLs.length});
+ await Promise.all(imageURLs.map(async url=>{await recoverResource('关键纹理 '+url,()=>images.load(url,assetChunks[url]?.sha256||''));canvas.dataset.criticalImages=JSON.stringify({completed:++readyImages,total:imageURLs.length});startupStatus(`关键纹理校验与解码 ${readyImages}/${imageURLs.length}`);}));
  let regionalLand={land:data.land};
  let beachSurface:ReturnType<typeof createBeachSurface>;
  const beachBounds=beachData.beaches.map((b:any)=>({minX:Math.min(...b.polygon.map((p:number[])=>p[0])),maxX:Math.max(...b.polygon.map((p:number[])=>p[0])),minZ:Math.min(...b.polygon.map((p:number[])=>p[1])),maxZ:Math.max(...b.polygon.map((p:number[])=>p[1]))}));
  await phase('正在加载真实高程与海岸地形');
- const terrain=await recoverResource('真实高程',()=>createTerrain(scene,region,data,raw=>{beachSurface=createBeachSurface(beachData,raw);const heritageSurface=createHeritageSurface(heritageData,raw);return(x,z)=>beachSurface.sampleSurface(x,z)??heritageSurface.sampleSurface(x,z);},beachBounds,beachData.metadata.groundCutMask,(x,z)=>beachSurface.contains(x,z)));
+ const terrain=await recoverResource('真实高程',()=>createTerrain(scene,region,data,raw=>{beachSurface=createBeachSurface(beachData,raw);const heritageSurface=createHeritageSurface(heritageData,raw);return(x,z)=>beachSurface.sampleSurface(x,z)??heritageSurface.sampleSurface(x,z);},beachBounds,beachData.metadata.groundCutMask,(x,z)=>beachSurface.contains(x,z),textures.create));
  await phase('正在生成沙滩与地标模型');
  const beaches=buildBeaches(scene,beachData,terrain.sample);
  const civic=buildCivicBuildings(scene,civicData,shadows,terrain.sample);
@@ -112,7 +121,9 @@ async function start(){
  const sky=createSky(scene);
  const fallbackBounds={minX:-1920,minZ:-1700,maxX:2580,maxZ:1950};
  const shore=data.shoreTexture || data.shoreDistanceTexture || {bounds:fallbackBounds,maxDistance:100};
- const ocean=createOcean(scene,{...shore,regional:(region as any).shoreTexture},[sky.mesh,...world.reflectionMeshes]);
+ const ocean=createOcean(scene,{...shore,regional:(region as any).shoreTexture},[sky.mesh,...world.reflectionMeshes],textures.create);
+ await phase('关键纹理正在上传至显卡');await textures.ready();
+ await phase('正在准备材质与首帧，完成后进入场景');
  const details=data.meta || data.metadata || {};const est=data.buildings.filter((b:any)=>b.estimatedHeight).length;
  $('data-summary').textContent=`场景以 120.3163°E、36.0603°N 为原点，采用 WGS84 局部等距米制投影。读取 ${world.stats.buildings} 栋建筑、${world.stats.roads} 条道路，其中 ${est} 栋建筑高度为估算。八个区域合计 23758 栋 OSM 建筑（包含近景部分），区域细节在后台按需加载。地形为真实 DEM；建筑高度大多估算。数据日期：${(details.fetchedAtUTC || details.dataTimestamp || '2026-10-12').slice(0,10)}。`;
  let mode='orbit',realtime=true,hour=chinaDateParts(new Date()).hours,day=chinaDateParts(new Date()).date,qualityHigh=true;
@@ -174,9 +185,8 @@ async function start(){
   $('clock').textContent=chinaTime(date);$('date').textContent=`${chinaDateParts(date).date} · 北京时间`;$('period').textContent=solar.altitude>6?'日间':solar.altitude>-6?'晨昏':'夜间';$('sun-altitude').textContent=`${solar.altitude.toFixed(1)}°`;$<HTMLInputElement>('hours').value=String(chinaDateParts(date).hours);
  }
  updateTimeState();updateSun(realtime?new Date():chinaInstant(day,hour));
- // Preserve the view the visitor explored while resources were arriving.
- try{const saved=JSON.parse(document.getElementById('quick-scene')?.dataset.camera||'null');if(saved&&saved.target?.length===3&&[...saved.target,saved.radius,saved.alpha,saved.beta].every((n:unknown)=>typeof n==='number'&&Number.isFinite(n))){orbit.setTarget(Vector3.FromArray(saved.target));orbit.radius=Math.max(35,Math.min(8000,saved.radius));orbit.alpha=saved.alpha;orbit.beta=Math.max(.2,Math.min(1.45,saved.beta));}}catch{}
  let revealed=false;
+ const readyTimer=setTimeout(()=>startupFailure(new Error('材质编译尚未完成。加载页将保留，请检查 WebGL 或重新载入。')),60000);
  engine.runRenderLoop(()=>{const dt=Math.min(engine.getDeltaTime()/1000,.05);elapsed+=dt;
   mapControls.update(dt);
   orbit.panningSensibility=canvas.clientHeight/(2*Math.max(20,orbit.radius)*Math.tan(orbit.fov/2)*(1-orbit.panningInertia));
@@ -193,11 +203,10 @@ async function start(){
 
   if(elapsed-lastShadowCull>.15){lastShadowCull=elapsed;shadows.getShadowMap()!.renderList=shadowCandidates.filter(b=>b.mesh.isEnabled()&&Math.hypot(Math.max(b.minX-viewTarget.x,0,viewTarget.x-b.maxX),Math.max(b.minZ-viewTarget.z,0,viewTarget.z-b.maxZ))<1300).map(b=>b.mesh);}
   ocean.update(elapsed,new Vector3(solar.direction.x,solar.direction.y,solar.direction.z),sunColor,solar.daylight,top,horizon);scene.render();labels.update(elapsed);
-  if(!revealed){revealed=true;window.dispatchEvent(new Event('qingdao-scene-ready'));$('boot-root')?.remove();}
+  if(!revealed&&scene.isReady()){revealed=true;clearTimeout(readyTimer);document.documentElement.dataset.sceneStage='full';$('boot-root')?.remove();setTimeout(()=>void background.run(),0);}
   if(elapsed-lastHUD>.5){lastHUD=elapsed;const now=realtime?new Date():chinaInstant(day,hour);if(realtime){day=chinaDateParts(now).date;hour=chinaDateParts(now).hours;}updateSun(now);$('fps').textContent=`${Math.round(engine.getFps())} FPS`;$('altitude').textContent=`${scene.activeCamera!.position.y.toFixed(1)} m`;canvas.dataset.camera=JSON.stringify({target:orbit.target.asArray(),radius:orbit.radius,alpha:orbit.alpha,beta:orbit.beta,mode});drawMap();}
  });
  window.addEventListener('resize',()=>engine.resize());
- setTimeout(()=>void background.run(),0);
- (window as any).__demo={scene,engine,world,parks,heritage,bridge,get character(){return character;},setMode,solar:()=>solar,data,updateSun,terrain,get regional(){return regional;},region,beaches,civic,plazas,get overview(){return overview;},get metro(){return metro;},version:'0.5.1'};
+ (window as any).__demo={scene,engine,world,parks,heritage,bridge,get character(){return character;},setMode,solar:()=>solar,data,updateSun,terrain,get regional(){return regional;},region,beaches,civic,plazas,get overview(){return overview;},get metro(){return metro;},version:'0.5.2'};
 }
 start().catch(startupFailure);
