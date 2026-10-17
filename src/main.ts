@@ -5,6 +5,8 @@ import havokWasmUrl from '@babylonjs/havok/lib/esm/HavokPhysics.wasm?url';
 import { buildWorld } from './world';
 import { createOcean } from './ocean';
 import { createSky } from './sky';
+import { createSeaFog } from './sea-fog';
+import { buildNightStreets } from './night-streets';
 import { solarState, chinaInstant, chinaTime, chinaDateParts } from './solar';
 import { nextVerticalVelocity } from './movement';
 import { createTerrain, type Region } from './terrain';
@@ -40,7 +42,7 @@ app.innerHTML=`
 <section class="timeline" aria-label="东八区时间控制"><div class="time-head"><div class="time-display"><span id="clock">--:--:--</span><small>UTC +08</small></div><button id="realtime" class="active" aria-pressed="true">● 跟随实时</button></div><input id="hours" aria-label="预览时间（北京时间）" type="range" min="0" max="23.99" step="0.01" value="12"><div class="ticks"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div><div class="time-date"><span id="date">—</span><span id="period">太阳位置由青岛经纬度计算</span></div></section>
 <nav class="districts" aria-label="区域导航"><button id="region-view">全域</button><button id="mountain-view">崂山山地</button><span id="district-list"></span></nav><aside class="mini"><div class="mini-title"><span id="map-title">青岛湾</span><span>↑ N</span></div><canvas id="minimap" width="348" height="226" aria-label="场景范围与相机位置示意图"></canvas><div class="mini-footer"><span>WGS84 · 米制场景</span><b id="map-scale">500 m ━</b></div></aside>
 <footer class="footer"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors · ODbL</a><a class="dem-credit" href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Terrain Tiles / Mapzen · DEM</a><div class="metrics"><span id="physics">Havok 加载中</span><span id="altitude">— m</span><span id="fps">— FPS</span></div></footer><div id="toast" class="toast" role="status"></div><div class="crosshair"></div>
-<dialog id="about"><h2>青岛湾 · 栈桥</h2><p>这是一个用于后续游戏扩展的三维场景原型，支持观景、步行与自由飞行。</p><h3>地理比例与模型</h3><p id="data-summary">正在读取数据。</p><p>建筑轮廓、道路走向与海岸线来自 OSM。缺失建筑高度采用估算；地形采用 AWS / Mapzen 真实 DEM，全域网格 400 米，旧城精细网格 32 米，浮山精细网格 40 米、崂山精细网格 80 米。网格间距不代表测绘精度。周边建筑为风格化模型；回澜阁、青岛站、胶州湾大桥和老城重点建筑依据实景及建筑资料单独复原，缺少施工图的细部尺寸仍为估算。海面风浪为视觉模拟，未接入真实潮位或天气。</p><h3>地标复原依据</h3><p>回澜阁采用黄色琉璃瓦、双层八角飞檐、24根亭柱；青岛站还原黄墙红瓦、花岗岩饰面、拱券入口、半木构山墙与35米钟楼。新增信号山三座红色球形观景楼、小鱼山绿瓦三层览潮阁、总督府与迎宾馆、啤酒博物馆、大学路鱼山路红墙、海大鱼山校区代表建筑，以及胶州湾大桥三类航道桥。复原展示外观，室内未完整复原。新增青岛电视塔钢结构、五月的风及市政府与广场。沙滩保留真实 OSM 岸线，湿沙坡面为视觉插值。</p><p><a href="https://www.guanhai.com.cn/p/476619.html" target="_blank" rel="noopener">青岛日报：回澜阁建筑资料</a> · <a href="https://www.dailyqd.com/arc/2016-09/22/content_352743.htm" target="_blank" rel="noopener">青岛日报：青岛站历史与现代实景</a> · <a href="/data/LANDMARKS.md" target="_blank" rel="noopener">尺寸与参考来源记录</a></p><p><a href="/data/CITY-LANDMARKS.md" target="_blank" rel="noopener">新增地标与大桥：资料、比例与估算说明</a></p><h3>光照与海面</h3><p>太阳与月亮位置按青岛经纬度、日期及绝对时间计算，时间显示固定为 Asia/Shanghai（UTC+8）。日落前后的低角度阳光会改变海面反光方向；夜间亮起建筑暖窗与广场灯；滨海高楼交替播放色彩灯光秀，为视觉模拟，未接入实况。地铁光带沿 OSM 独立线路显示，不能作为最新运营范围或列车位置依据。</p><p>海面参考 <a href="https://github.com/mrdoob/three.js/blob/dev/examples/jsm/objects/Water.js" target="_blank" rel="noopener">Three.js 开源 Water 示例</a>的反射与菲涅耳思路，独立实现方向波、细浪、岸线泡沫与栈桥倒影。</p><h3>操作</h3><ul><li>观景：左键拖拽地图，右键旋转视角，滚轮以鼠标位置为中心平滑缩放。</li><li>步行：WASD 移动，Shift 加速，Space 跳跃；拖动视角。桌面可点击画面锁定鼠标，Esc 退出。</li><li>飞行：WASD 移动，E 上升、Q 下降，Shift 加速。属于自由飞行原型。</li></ul><button id="close-about">继续探索</button></dialog>`;
+<dialog id="about"><h2>青岛湾 · 栈桥</h2><p>这是一个用于后续游戏扩展的三维场景原型，支持观景、步行与自由飞行。</p><h3>地理比例与模型</h3><p id="data-summary">正在读取数据。</p><p>建筑轮廓、道路走向与海岸线来自 OSM。缺失建筑高度采用估算；地形采用 AWS / Mapzen 真实 DEM，全域网格 400 米，旧城精细网格 32 米，浮山精细网格 40 米、崂山精细网格 80 米。网格间距不代表测绘精度。周边建筑为风格化模型；回澜阁、青岛站、胶州湾大桥和老城重点建筑依据实景及建筑资料单独复原，缺少施工图的细部尺寸仍为估算。海面风浪为视觉模拟，未接入真实潮位或天气。</p><h3>地标复原依据</h3><p>回澜阁采用黄色琉璃瓦、双层八角飞檐、24根亭柱；青岛站还原黄墙红瓦、花岗岩饰面、拱券入口、半木构山墙与35米钟楼。新增信号山三座红色球形观景楼、小鱼山绿瓦三层览潮阁、总督府与迎宾馆、啤酒博物馆、大学路鱼山路红墙、海大鱼山校区代表建筑，以及胶州湾大桥三类航道桥。复原展示外观，室内未完整复原。新增青岛电视塔钢结构、五月的风及市政府与广场。沙滩保留真实 OSM 岸线，湿沙坡面为视觉插值。</p><p><a href="https://www.guanhai.com.cn/p/476619.html" target="_blank" rel="noopener">青岛日报：回澜阁建筑资料</a> · <a href="https://www.dailyqd.com/arc/2016-09/22/content_352743.htm" target="_blank" rel="noopener">青岛日报：青岛站历史与现代实景</a> · <a href="/data/LANDMARKS.md" target="_blank" rel="noopener">尺寸与参考来源记录</a></p><p><a href="/data/CITY-LANDMARKS.md" target="_blank" rel="noopener">新增地标与大桥：资料、比例与估算说明</a></p><h3>光照与海面</h3><p>太阳与月亮位置按青岛经纬度、日期及绝对时间计算，时间显示固定为 Asia/Shanghai（UTC+8）。日落前后的低角度阳光会改变海面反光方向；云层缓慢漂移，落日时呈现橙红与紫粉色火烧云，海面同步映出云色；夜间沿真实海岸形成贴海平流雾，雾带从海面迎岸扑向滨海街区，进入内陆约650米内逐渐消散，并亮起建筑暖窗与广场灯；滨海高楼交替播放色彩灯光秀，为视觉模拟，未接入实况。地铁光带沿 OSM 独立线路显示，不能作为最新运营范围或列车位置依据。</p><p>海面参考 <a href="https://github.com/mrdoob/three.js/blob/dev/examples/jsm/objects/Water.js" target="_blank" rel="noopener">Three.js 开源 Water 示例</a>的反射与菲涅耳思路，独立实现方向波、细浪、岸线泡沫与栈桥倒影。</p><h3>操作</h3><ul><li>观景：左键拖拽地图，右键旋转视角，滚轮以鼠标位置为中心平滑缩放。</li><li>步行：WASD 移动，Shift 加速，Space 跳跃；拖动视角。桌面可点击画面锁定鼠标，Esc 退出。</li><li>飞行：WASD 移动，E 上升、Q 下降，Shift 加速。属于自由飞行原型。</li></ul><button id="close-about">继续探索</button></dialog>`;
 const $=<T extends HTMLElement>(id:string)=>document.getElementById(id) as T;
 const canvas=$<HTMLCanvasElement>('scene');
 let toastTimer=0;function toast(text:string){$('toast').textContent=text;$('toast').classList.add('show');clearTimeout(toastTimer);toastTimer=window.setTimeout(()=>$('toast').classList.remove('show'),3200);}
@@ -86,6 +88,7 @@ async function start(){
  const replaced=new Set([...parks.excludedBuildingIds,...heritage.excludedBuildingIds,...civic.excludedBuildingIds,...plazas.excludedBuildingIds]);
  await phase('正在生成老城区建筑与道路');
  const world=buildWorld(scene,data,shadows,terrain.sample,replaced,new Set([...beaches.excludedAreaIds,...plazas.excludedAreaIds]),(x,z)=>beachSurface.contains(x,z));
+ const nightStreets=buildNightStreets(scene,data.roads,terrain.sample);
  let regional:Awaited<ReturnType<typeof createRegional>>|null=null;
  let overview:ReturnType<typeof buildCityOverview>|null=null;
  let metro:ReturnType<typeof buildMetro>|null=null;
@@ -119,6 +122,7 @@ async function start(){
  $('lightshow-toggle').onclick=()=>{lightShowEnabled=!lightShowEnabled;$('lightshow-toggle').classList.toggle('active',lightShowEnabled);$('lightshow-toggle').setAttribute('aria-pressed',String(lightShowEnabled));};
 
  const sky=createSky(scene);
+ const seaFog=createSeaFog(scene,region.metadata.coastalFog,textures.create);
  const fallbackBounds={minX:-1920,minZ:-1700,maxX:2580,maxZ:1950};
  const shore=data.shoreTexture || data.shoreDistanceTexture || {bounds:fallbackBounds,maxDistance:100};
  const ocean=createOcean(scene,{...shore,regional:(region as any).shoreTexture},[sky.mesh,...world.reflectionMeshes],textures.create);
@@ -180,7 +184,7 @@ async function start(){
  function updateSun(date:Date){solar=solarState(date);const d=solar.daylight;top.copyFrom(Color3.Lerp(new Color3(.023,.044,.085),new Color3(.15,.46,.76),d));horizon.copyFrom(Color3.Lerp(new Color3(.065,.105,.15),new Color3(.72,.87,.93),d));
   const golden=Math.max(0,1-Math.abs(solar.altitude-4)/15)*d;horizon=Color3.Lerp(horizon,new Color3(.88,.63,.41),golden*.48);sunColor=Color3.Lerp(new Color3(1,.60,.32),new Color3(1,.97,.88),Math.min(1,Math.max(0,solar.altitude)/28));
   const dir=new Vector3(solar.direction.x,solar.direction.y,solar.direction.z);sun.direction=dir.negate();sun.position=world.pavilionPosition.add(dir.scale(1100));sun.intensity=solar.sunlight>0?Math.max(.12,Math.pow(solar.sunlight,.4))*.9:0;sun.diffuse=sunColor;
-  ambient.intensity=.30+d*.26;ambient.diffuse=Color3.Lerp(new Color3(.43,.56,.78),new Color3(.91,.97,1),d);scene.fogColor=horizon;
+  ambient.intensity=.44+d*.12;ambient.diffuse=Color3.Lerp(new Color3(.38,.52,.82),new Color3(.91,.97,1),d);scene.fogColor=horizon;
   sky.update(dir,new Vector3(solar.moonDirection.x,solar.moonDirection.y,solar.moonDirection.z),top,horizon,sunColor,d,solar.moonIllumination);
   $('clock').textContent=chinaTime(date);$('date').textContent=`${chinaDateParts(date).date} · 北京时间`;$('period').textContent=solar.altitude>6?'日间':solar.altitude>-6?'晨昏':'夜间';$('sun-altitude').textContent=`${solar.altitude.toFixed(1)}°`;$<HTMLInputElement>('hours').value=String(chinaDateParts(date).hours);
  }
@@ -202,6 +206,8 @@ async function start(){
   sun.position=stableShadowPosition(viewTarget,sunDir);sun.shadowEnabled=detailDistance<5600;shadows.setDarkness(.25+.75*Math.max(0,Math.min(1,(detailDistance-3200)/2000)));shadows.getShadowMap()!.refreshRate=detailDistance<5600?(qualityHigh?1:2):0;
 
   if(elapsed-lastShadowCull>.15){lastShadowCull=elapsed;shadows.getShadowMap()!.renderList=shadowCandidates.filter(b=>b.mesh.isEnabled()&&Math.hypot(Math.max(b.minX-viewTarget.x,0,viewTarget.x-b.maxX),Math.max(b.minZ-viewTarget.z,0,viewTarget.z-b.maxZ))<1300).map(b=>b.mesh);}
+  sky.animate(elapsed);seaFog.update(elapsed,solar.daylight,qualityHigh);
+  nightStreets.update(solar.daylight,active.position);regional?.nightStreets.update(solar.daylight,active.position);
   ocean.update(elapsed,new Vector3(solar.direction.x,solar.direction.y,solar.direction.z),sunColor,solar.daylight,top,horizon);scene.render();labels.update(elapsed);
   if(!revealed&&scene.isReady()){revealed=true;clearTimeout(readyTimer);document.documentElement.dataset.sceneStage='full';$('boot-root')?.remove();setTimeout(()=>void background.run(),0);}
   if(elapsed-lastHUD>.5){lastHUD=elapsed;const now=realtime?new Date():chinaInstant(day,hour);if(realtime){day=chinaDateParts(now).date;hour=chinaDateParts(now).hours;}updateSun(now);$('fps').textContent=`${Math.round(engine.getFps())} FPS`;$('altitude').textContent=`${scene.activeCamera!.position.y.toFixed(1)} m`;canvas.dataset.camera=JSON.stringify({target:orbit.target.asArray(),radius:orbit.radius,alpha:orbit.alpha,beta:orbit.beta,mode});drawMap();}

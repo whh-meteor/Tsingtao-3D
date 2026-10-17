@@ -3,6 +3,7 @@ import earcut from 'earcut';
 import {fetchJSON} from './asset-loader';
 import type { Region, Bounds } from './terrain';
 import {createCityMaterials} from './city-lighting';
+import {buildNightStreets} from './night-streets';
 import type { Material } from '@babylonjs/core/Materials/material';
 type Road={points:number[][];width:number;type:string;id:string};
 type Chunk={id:string;file:string;bounds:Bounds;buildingCount:number;roadCount:number};
@@ -17,6 +18,7 @@ export async function createRegional(scene:Scene,region:Region,sample:(x:number,
  const [index,roadsData]=await Promise.all([fetchJSON(region.chunksIndexFile,{timeoutMs:120000}),fetchJSON(region.regionalRoadsFile,{timeoutMs:120000})]);
  const asphalt=new StandardMaterial('regional-road',scene);asphalt.diffuseColor=Color3.White();asphalt.specularColor=Color3.Black();asphalt.useLogarithmicDepth=true;asphalt.zOffset=-3;asphalt.zOffsetUnits=-3;
  const cityMaterials=createCityMaterials(scene),wall=cityMaterials.wall,roof=cityMaterials.roof;
+ const nightStreets=buildNightStreets(scene,roadsData.roads.filter((road:Road)=>!excludedRoadIds.has(String(road.id))),sample,localBounds);
  function road(batch:Batch,r:Road){const color=Color3.FromHexString('#667271');let half=Math.max(2,r.width/2);for(let i=1;i<r.points.length;i++){const a=r.points[i-1],b=r.points[i],len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len<.2)continue;
   if(a[0]>=localBounds.minX&&a[0]<=localBounds.maxX&&a[1]>=localBounds.minZ&&a[1]<=localBounds.maxZ&&b[0]>=localBounds.minX&&b[0]<=localBounds.maxX&&b[1]>=localBounds.minZ&&b[1]<=localBounds.maxZ)continue;
   const n=Math.max(1,Math.ceil(len/60)),nx=-(b[1]-a[1])/len*half,nz=(b[0]-a[0])/len*half;
@@ -29,11 +31,11 @@ export async function createRegional(scene:Scene,region:Region,sample:(x:number,
  const roadGroups=new Map<string,Batch>();for(const r of roadsData.roads as Road[]){if(excludedRoadIds.has(String(r.id)))continue;const p=r.points[Math.floor(r.points.length/2)];if(!p)continue;
   const key=`${Math.floor(p[0]/8000)}_${Math.floor(p[1]/8000)}`;let batch=roadGroups.get(key);if(!batch)roadGroups.set(key,batch=new Batch());road(batch,r);}
  for(const [key,b]of roadGroups){const m=b.finish('regional-road-'+key,scene,asphalt);if(m)roads.push(m);}
- const groupKey=(c:Chunk)=>Math.floor(c.bounds.minX/8000)+'_'+Math.floor(c.bounds.minZ/8000);const groupChunks=new Map<string,Chunk[]>();for(const c of index.chunks as Chunk[]){if(!c.buildingCount)continue;const k=groupKey(c);if(!groupChunks.has(k))groupChunks.set(k,[]);groupChunks.get(k)!.push(c);}let detailLOD=true;const displayedGroups=new Set<string>();
+ const groupKey=(c:Chunk)=>Math.floor(c.bounds.minX/4000)+'_'+Math.floor(c.bounds.minZ/4000);const groupChunks=new Map<string,Chunk[]>();const chunksById=new Map<string,Chunk>();for(const c of index.chunks as Chunk[]){chunksById.set(c.id,c);if(!c.buildingCount)continue;const k=groupKey(c);if(!groupChunks.has(k))groupChunks.set(k,[]);groupChunks.get(k)!.push(c);}let detailLOD=true;const displayedGroups=new Set<string>();
  const loaded=new Map<string,Mesh[]>(),pending=new Set<string>();let totalBuildings=0;let lastUpdate=-10;
  function insideLocal(x:number,z:number){return x>=localBounds.minX&&x<=localBounds.maxX&&z>=localBounds.minZ&&z<=localBounds.maxZ;}
  async function load(c:Chunk){pending.add(c.id);try{const data=await fetchJSON(c.file,{attempts:2,timeoutMs:30000});const walls=new Batch(),roofs=new Batch();
-  let processed=0;for(const b of data.buildings){if(excludedBuildingIds.has(String(b.id)))continue;if(processed++%150===149)await new Promise<void>(resolve=>requestAnimationFrame(()=>resolve()));const poly=b.polygon as number[][];if(poly.length<3)continue;const cx=poly.reduce((s,p)=>s+p[0],0)/poly.length,cz=poly.reduce((s,p)=>s+p[1],0)/poly.length;if(insideLocal(cx,cz))continue;
+  let processed=0,sliceStart=performance.now();for(const b of data.buildings){if(excludedBuildingIds.has(String(b.id)))continue;if(processed++%48===47||performance.now()-sliceStart>3){await new Promise<void>(resolve=>setTimeout(resolve,0));sliceStart=performance.now();}const poly=b.polygon as number[][];if(poly.length<3)continue;const cx=poly.reduce((s,p)=>s+p[0],0)/poly.length,cz=poly.reduce((s,p)=>s+p[1],0)/poly.length;if(insideLocal(cx,cz))continue;
    walls.coast=coastalIds.has(String(b.id))?1:0;const base=Math.max(...poly.map(p=>sample(p[0],p[1]))),height=b.height||9;const top=base+height;const hash=String(b.id).split('').reduce((s,c)=>s+c.charCodeAt(0),0);
    const wt=Color3.FromHexString(['#eadcc4','#e6e5d6','#d6e1d6'][hash%3]),rt=Color3.FromHexString(height<22?['#bd6449','#af5038','#c37a57'][hash%3]:'#929d98');
    for(let i=0;i<poly.length;i++){const a=poly[i],q=poly[(i+1)%poly.length];walls.quad([a[0],sample(a[0],a[1])-.3,a[1]],[a[0],top,a[1]],[q[0],top,q[1]],[q[0],sample(q[0],q[1])-.3,q[1]],wt);}
@@ -42,16 +44,16 @@ export async function createRegional(scene:Scene,region:Region,sample:(x:number,
   const meshes=[walls.finish('district-wall-'+c.id,scene,wall),roofs.finish('district-roof-'+c.id,scene,roof)].filter(Boolean) as Mesh[];
   meshes.forEach(m=>m.setEnabled(false));loaded.set(c.id,meshes);totalBuildings+=c.buildingCount;
  }catch(e){console.warn('区域分块加载失败',c.id,e);}finally{pending.delete(c.id);}}
- return {index,roadsData,cityMaterials,detailReady:(key:string)=>displayedGroups.has(key),stats:()=>({loaded:loaded.size,pending:pending.size,buildings:totalBuildings,total:index.totals}),
-  update(time:number,camera:Vector3,target:Vector3){if(time-lastUpdate<.6)return;lastUpdate=time;const altitude=camera.y;
-   if(detailLOD&&altitude>11000)detailLOD=false;else if(!detailLOD&&altitude<8000)detailLOD=true;
+ return {index,roadsData,cityMaterials,nightStreets,detailReady:(key:string)=>displayedGroups.has(key),stats:()=>({loaded:loaded.size,pending:pending.size,buildings:totalBuildings,total:index.totals}),
+  update(time:number,camera:Vector3,target:Vector3){if(time-lastUpdate<.25)return;lastUpdate=time;const altitude=camera.y;
+   if(detailLOD&&altitude>14000)detailLOD=false;else if(!detailLOD&&altitude<11000)detailLOD=true;
    const visibleRange=Math.max(5000,Math.min(18000,altitude*3));
    const nearest=(index.chunks as Chunk[]).filter(c=>c.buildingCount>0&&distance(c.bounds,target.x,target.z)<visibleRange).sort((a,b)=>distance(a.bounds,target.x,target.z)-distance(b.bounds,target.x,target.z));
    const groups=detailLOD?[...new Set(nearest.map(groupKey))].slice(0,3):[];
    const candidates=groups.flatMap(k=>groupChunks.get(k)!).sort((a,b)=>distance(a.bounds,target.x,target.z)-distance(b.bounds,target.x,target.z));
    displayedGroups.clear();for(const k of groups)if(groupChunks.get(k)!.every(c=>loaded.has(c.id)))displayedGroups.add(k);
-   const visible=new Set(candidates.map(c=>c.id));for(const [id,meshes]of loaded){const c=(index.chunks as Chunk[]).find(c=>c.id===id)!;for(const mesh of meshes)mesh.setEnabled(displayedGroups.has(groupKey(c)));}
-   for(const c of candidates){if(pending.size>=2)break;if(!loaded.has(c.id)&&!pending.has(c.id))void load(c);}
+   const visible=new Set(candidates.map(c=>c.id));for(const [id,meshes]of loaded){const c=chunksById.get(id)!;for(const mesh of meshes){const enabled=displayedGroups.has(groupKey(c));if(mesh.isEnabled()!==enabled)mesh.setEnabled(enabled);}}
+   for(const c of candidates){if(pending.size>=3)break;if(!loaded.has(c.id)&&!pending.has(c.id))void load(c);}
    // Keep only a bounded working set when moving between distant districts.
    if(loaded.size>72)for(const [id,meshes]of loaded){if(loaded.size<=60)break;if(!visible.has(id)){meshes.forEach(m=>m.dispose());loaded.delete(id);}}
    roads.forEach(m=>{const b=m.getBoundingInfo().boundingBox;const nearest=distance({minX:b.minimumWorld.x,maxX:b.maximumWorld.x,minZ:b.minimumWorld.z,maxZ:b.maximumWorld.z},camera.x,camera.z);m.setEnabled(altitude<32000&&nearest<Math.max(25000,altitude*5));});

@@ -48,6 +48,6 @@ export function attachMapControls(canvas:HTMLCanvasElement,scene:Scene,camera:Ar
  return {reset,update(dt:number){
   if(!options.enabled()){if(drag||zoom)reset();return;}
   canvas.classList.add('map-navigation');
-  if(zoom){camera.radius+=(zoom.radius-camera.radius)*(1-Math.exp(-18*dt));anchorAt(zoom.anchor,zoom.x,zoom.y,zoom.height);if(Math.abs(camera.radius-zoom.radius)<Math.max(.01,zoom.radius*1e-5)){camera.radius=zoom.radius;anchorAt(zoom.anchor,zoom.x,zoom.y,zoom.height);zoom=null;}}
+  if(zoom){camera.radius+=(zoom.radius-camera.radius)*(1-Math.exp(-28*dt));anchorAt(zoom.anchor,zoom.x,zoom.y,zoom.height);if(Math.abs(camera.radius-zoom.radius)<Math.max(.05,zoom.radius*.0003)){camera.radius=zoom.radius;anchorAt(zoom.anchor,zoom.x,zoom.y,zoom.height);zoom=null;}}
  },dispose(){reset();canvas.removeEventListener('pointerdown',down,true);canvas.removeEventListener('pointermove',move,true);canvas.removeEventListener('pointerup',up,true);canvas.removeEventListener('pointercancel',up,true);canvas.removeEventListener('wheel',wheel,true);canvas.removeEventListener('contextmenu',context);}};
 }

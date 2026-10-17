@@ -2,6 +2,7 @@
 import '@babylonjs/core/Lights/Shadows/shadowGeneratorSceneComponent';
 import '@babylonjs/core/Physics/joinedPhysicsEngineComponent';
 import '@babylonjs/core/Physics/v2/physicsEngineComponent';
+import '@babylonjs/core/Rendering/depthRendererSceneComponent';
 import '@babylonjs/core/Culling/ray';
 import '@babylonjs/core/Shaders/ShadersInclude/logDepthDeclaration';
 import '@babylonjs/core/Shaders/ShadersInclude/logDepthVertex';
@@ -11,6 +12,7 @@ import '@babylonjs/core/Shaders/shadowMap.fragment';
 import '@babylonjs/core/Shaders/fxaa.fragment';
 import '@babylonjs/core/Shaders/fxaa.vertex';
 import '@babylonjs/core/Shaders/postprocess.vertex';
+import '@babylonjs/core/Shaders/pass.fragment';
 export { Engine } from '@babylonjs/core/Engines/engine';
 export { EngineStore } from '@babylonjs/core/Engines/engineStore';
 export { Scene } from '@babylonjs/core/scene';
@@ -37,3 +39,5 @@ export { DynamicTexture } from '@babylonjs/core/Materials/Textures/dynamicTextur
 export { MirrorTexture } from '@babylonjs/core/Materials/Textures/mirrorTexture';
 export { Ray } from '@babylonjs/core/Culling/ray';
 export { FxaaPostProcess } from '@babylonjs/core/PostProcesses/fxaaPostProcess';
+export { PostProcess } from '@babylonjs/core/PostProcesses/postProcess';
+export { ShaderStore } from '@babylonjs/core/Engines/shaderStore';

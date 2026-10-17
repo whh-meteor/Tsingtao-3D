@@ -41,5 +41,5 @@ export class ImageResources{
 export function criticalImageURLs(local:any,region:any,beaches:any){
  const mask=region.metadata?.terrainPalette||local.regionalLandMask||region.metadata?.landMask;
  const detail=region.metadata?.detailTerrainPalette||region.metadata?.detailLandMask;
- return[...new Set<string>([mask?.url,detail?.url,beaches.metadata?.groundCutMask?.url,local.shoreTexture?.url||local.shoreDistanceTexture?.url||'/data/shore-distance.png',region.shoreTexture?.url||local.shoreTexture?.url||'/data/shore-distance.png'].filter(Boolean))];
+ return[...new Set<string>([mask?.url,detail?.url,beaches.metadata?.groundCutMask?.url,local.shoreTexture?.url||local.shoreDistanceTexture?.url||'/data/shore-distance.png',region.shoreTexture?.url||local.shoreTexture?.url||'/data/shore-distance.png',region.metadata?.coastalFog?.regional?.url,region.metadata?.coastalFog?.local?.url].filter(Boolean))];
 }
